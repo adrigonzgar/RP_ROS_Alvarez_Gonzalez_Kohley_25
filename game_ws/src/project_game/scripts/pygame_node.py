@@ -3,10 +3,15 @@
 #############################################
 #                PYGAME_NODE                #
 #############################################
+# Andrea Álvarez Campos    100496951
+# Adrián Gonzalez García   100523018
+# Lucas Kohley Aguilar     100497018
 
 import rospy
 import pygame
+import os 
 from project_game.msg import game_state
+from std_msgs.msg import String
 
 class PygameNode:
     def __init__(self):
@@ -15,8 +20,10 @@ class PygameNode:
 
         # --- Init pygame ---
         pygame.init()
-        self.screen = pygame.display.set_mode((800, 600))
-        pygame.display.set_caption("ROS Game - Minimal Edition")
+        self.screen_width = 800
+        self.screen_height = 600
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        pygame.display.set_caption("Donkey Kong ROS")
 
         self.clock = pygame.time.Clock()
 
@@ -25,185 +32,234 @@ class PygameNode:
         self.player_x = 100
         self.player_y = 300
         self.score = 0
+        self.lives = 3
+        self.barrels_data = []
         
-        # --- LEVEL CONFIGURATION ---
+        # --- COLORES ---
+        self.BLACK = (0, 0, 0)
+        self.WHITE = (255, 255, 255)
+        self.YELLOW = (255, 255, 0) 
+        self.BLUE_PLATFORM = (0, 0, 255)
+        self.YELLOW_LADDER = (255, 255, 0)
+        
+        # Colores Mario
+        self.M_SHIRT = (255, 0, 0)      
+        self.M_OVERALLS = (0, 0, 255)   
+        self.M_SKIN = (255, 200, 150)   
+        self.M_SHOES = (139, 69, 19)    
+
+        # Colores Kong
+        self.DK_BROWN = (139, 69, 19)
+        self.DK_PEACH = (222, 184, 135)
+        self.DK_EYES = (0, 0, 0)
+        
+        # Color Barriles
+        self.BARREL_COLOR = (160, 82, 45) 
+
+        # --- CARGAR RECURSOS GRÁFICOS (FIX RUTA) ---
+        self.background_image = self.load_resources()
+        
+        # Fuentes
+        self.font_welcome = pygame.font.SysFont("Arial Black", 70, bold=True)
+        self.font_info = pygame.font.SysFont("Arial", 30)
+
         self.block_width = 40
         self.block_height = 25
-        
-        # Colors
-        self.BLUE_PLATFORM = (0, 0, 255)  
-        self.YELLOW_LADDER = (255, 255, 0) # <--- New Color for Ladders
 
-        # Define the level map (24 rows x 20 columns)
-        # 0 = Empty, 1 = Blue Platform, 2 = Yellow Ladder
+        # Mapa Visual
         self.level_map = [
-            # Level 6 (Empty top area)
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 0
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 1
-            
-            # Level 5 (Princess Platform)
-            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], # 2 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], # 3 (Ladder)
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], # 4 (Ladder)
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], # 5 (Ladder)
-
-            # Level 4 (DK Platform)
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], # 6 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], # 7 (Ladders down)
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], # 8
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], # 9
-
-            # Level 3 (Two separated platforms)
-            [0,0,1,1,1,1,1,1,2,0,0,0,0,1,1,1,1,1,0,0], # 10 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 11 (Ladders down)
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 12
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 13
-
-            # Level 2 
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # 14
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 15 (Ladders down)
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 16
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 17
-
-            # Level 1
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # 18 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 19 (Ladders down to ground)
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 20
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 21
-
-            # Ground Level
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], # 22
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  # 23
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
+            [0,0,1,1,1,1,1,1,2,0,0,0,0,1,1,1,1,1,0,0], 
+            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], 
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  
         ]
+
+        # --- Subscriber ---
+        rospy.Subscriber("game_state", game_state, self.callback_game_state)
+        rospy.Subscriber("barrels_data", String, self.callback_barrels)
         
-        # Define a simple Mario-like figure
-        self.mario_pixels = [
-            (10, 0, (255, 0, 0)), (15, 0, (255, 0, 0)), 
-            (5, 5, (255, 0, 0)), (20, 5, (255, 0, 0)), 
-            (10, 5, (255, 255, 255)), (15, 5, (255, 255, 255)), 
-            (5, 10, (0, 0, 255)), (20, 10, (0, 0, 255)), 
-            (10, 10, (255, 255, 255)), (15, 10, (255, 255, 255)), 
-            (10, 15, (0, 0, 255)), (15, 15, (0, 0, 255)), 
-            (10, 20, (139, 69, 19)), (15, 20, (139, 69, 19)), 
-        ]
-        self.pixel_size = 6
-
-        # --- Subscribe to game state ---
-        rospy.Subscriber("game_state", game_state, self.callback_state)
-
         self.run()
 
-    # Receives state updates from game_node
-    def callback_state(self, msg):
+    # --- FUNCIÓN CORREGIDA PARA ENCONTRAR LA IMAGEN ---
+    def load_resources(self):
+        image_name = "Pantalla_Carga_DK.jpg"
+        
+        # 1. Obtenemos la ruta absoluta de DONDE ESTÁ ESTE SCRIPT
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # 2. Construimos la ruta completa a la imagen
+        image_path = os.path.join(script_dir, image_name)
+        
+        rospy.loginfo(f"Buscando imagen en: {image_path}")
+
+        if os.path.exists(image_path):
+            try:
+                img = pygame.image.load(image_path)
+                img_scaled = pygame.transform.scale(img, (self.screen_width, self.screen_height))
+                rospy.loginfo("Imagen de fondo cargada EXITOSAMENTE.")
+                return img_scaled
+            except Exception as e:
+                rospy.logerr(f"Error al leer el archivo de imagen: {e}")
+                return None
+        else:
+            rospy.logwarn(f"NO SE ENCUENTRA LA IMAGEN en {image_path}. Usando fondo negro.")
+            return None
+
+    def callback_game_state(self, msg):
         self.state = msg.state
         self.player_x = msg.player_x
         self.player_y = msg.player_y
         self.score = msg.score
+        self.lives = msg.lives
 
-    # Draw WELCOME screen
-    def draw_welcome(self):
-        self.screen.fill((0, 0, 0))
-        self.draw_text("WELCOME!", 60, 400, 150)
-        self.draw_text("Press any key to start", 32, 400, 300)
-        pygame.display.flip()
+    def callback_barrels(self, msg):
+        raw_data = msg.data
+        new_barrels = []
+        if raw_data:
+            items = raw_data.split(';')
+            for item in items:
+                if ',' in item:
+                    coords = item.split(',')
+                    try:
+                        new_barrels.append((int(coords[0]), int(coords[1])))
+                    except:
+                        pass
+        self.barrels_data = new_barrels
 
-    # Draw RUNNING screen
-    def draw_running(self):
-        self.screen.fill((0, 0, 0))
-        
-        # Iterate over the map to draw platforms (1) and ladders (2)
+    # ---------------------------------------------------
+    #                DIBUJADO (DRAWING)
+    # ---------------------------------------------------
+
+    def draw_map(self):
         for row_index, row in enumerate(self.level_map):
             for col_index, tile in enumerate(row):
+                x = col_index * self.block_width
+                y = row_index * self.block_height
                 
-                # Calculate exact position
-                x_pos = col_index * self.block_width
-                y_pos = row_index * self.block_height
+                if tile == 1: 
+                    pygame.draw.rect(self.screen, self.BLUE_PLATFORM, (x, y, self.block_width, self.block_height))
+                elif tile == 2: 
+                    pygame.draw.rect(self.screen, self.YELLOW_LADDER, (x + 10, y, 5, self.block_height))
+                    pygame.draw.rect(self.screen, self.YELLOW_LADDER, (x + 25, y, 5, self.block_height))
+                    for i in range(0, self.block_height, 5):
+                        pygame.draw.rect(self.screen, self.YELLOW_LADDER, (x + 10, y + i, 20, 2))
 
-                if tile == 1:
-                    # --- DRAW BLUE PLATFORM ---
-                    pygame.draw.rect(
-                        self.screen, 
-                        self.BLUE_PLATFORM, 
-                        (x_pos, y_pos, self.block_width, self.block_height)
-                    )
-                    # Border
-                    pygame.draw.rect(
-                         self.screen, (0,0,0), 
-                         (x_pos, y_pos, self.block_width, self.block_height), 1
-                    )
-                
-                elif tile == 2:
-                    # --- DRAW YELLOW LADDER ---
-                    # 1. Left Vertical Rail
-                    pygame.draw.line(
-                        self.screen, self.YELLOW_LADDER, 
-                        (x_pos + 10, y_pos), (x_pos + 10, y_pos + self.block_height), 3
-                    )
-                    # 2. Right Vertical Rail
-                    pygame.draw.line(
-                        self.screen, self.YELLOW_LADDER, 
-                        (x_pos + 30, y_pos), (x_pos + 30, y_pos + self.block_height), 3
-                    )
-                    # 3. Horizontal Rungs (Steps) - Draw 4 steps per block
-                    for step_y in range(y_pos + 5, y_pos + self.block_height, 6):
-                        pygame.draw.line(
-                            self.screen, self.YELLOW_LADDER,
-                            (x_pos + 10, step_y), (x_pos + 30, step_y), 3
-                        )
-        
-        # Draw the custom Mario figure
-        for px_offset_x, px_offset_y, color in self.mario_pixels:
-            pygame.draw.rect(
-                self.screen, 
-                color, 
-                (self.player_x + px_offset_x, 
-                 self.player_y + px_offset_y, 
-                 self.pixel_size, 
-                 self.pixel_size)
-            )
+    def draw_player_original(self):
+        x = self.player_x
+        y = self.player_y
+        # 1. Cabeza
+        pygame.draw.rect(self.screen, self.M_SKIN, (x + 4, y, 16, 10))
+        # 2. Gorra
+        pygame.draw.rect(self.screen, self.M_SHIRT, (x, y, 24, 4))
+        pygame.draw.rect(self.screen, self.M_SHIRT, (x + 4, y - 2, 16, 4)) 
+        # 3. Cuerpo
+        pygame.draw.rect(self.screen, self.M_SHIRT, (x + 2, y + 10, 20, 10))
+        # 4. Peto
+        pygame.draw.rect(self.screen, self.M_OVERALLS, (x + 4, y + 16, 16, 10))
+        # 5. Piernas
+        pygame.draw.rect(self.screen, self.M_OVERALLS, (x + 2, y + 26, 6, 4)) 
+        pygame.draw.rect(self.screen, self.M_OVERALLS, (x + 16, y + 26, 6, 4)) 
+        # Zapatos
+        pygame.draw.rect(self.screen, self.M_SHOES, (x, y + 30, 8, 4))
+        pygame.draw.rect(self.screen, self.M_SHOES, (x + 16, y + 30, 8, 4))
+        # Manos
+        pygame.draw.rect(self.screen, self.M_SKIN, (x - 2, y + 14, 4, 4))
+        pygame.draw.rect(self.screen, self.M_SKIN, (x + 22, y + 14, 4, 4))
 
-        # Score
-        self.draw_text(f"Score: {self.score}", 30, 70, 30)
+    def draw_donkey_kong(self):
+        dk_x = 360  
+        dk_y = 12   
+        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x, dk_y + 20, 60, 40))
+        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 10, dk_y, 40, 30))
+        pygame.draw.rect(self.screen, self.DK_PEACH, (dk_x + 15, dk_y + 5, 30, 20))
+        pygame.draw.rect(self.screen, self.DK_EYES, (dk_x + 20, dk_y + 10, 4, 4))
+        pygame.draw.rect(self.screen, self.DK_EYES, (dk_x + 30, dk_y + 10, 4, 4))
+        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x - 10, dk_y + 25, 15, 25))
+        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 55, dk_y + 25, 15, 25))
 
-        pygame.display.flip()
+    def draw_barrels(self):
+        for (bx, by) in self.barrels_data:
+            pygame.draw.circle(self.screen, self.BARREL_COLOR, (bx + 10, by + 10), 10)
+            pygame.draw.circle(self.screen, (100, 50, 20), (bx + 10, by + 10), 6)
 
-    # Draw GAME OVER
-    def draw_game_over(self):
-        self.screen.fill((50, 0, 0))
-        self.draw_text("GAME OVER", 60, 400, 150)
-        self.draw_text(f"Final Score: {self.score}", 40, 400, 250)
-        self.draw_text("Press any key to restart", 30, 400, 350)
-        pygame.display.flip()
+    def draw_ui(self):
+        font = pygame.font.SysFont("Arial", 24)
+        score_text = font.render(f"Score: {self.score}", True, self.WHITE)
+        lives_text = font.render(f"Lives: {self.lives}", True, self.WHITE)
+        self.screen.blit(score_text, (10, 10))
+        self.screen.blit(lives_text, (700, 10)) 
 
-    # Helper function to draw text centered
-    def draw_text(self, text, size, x, y):
-        font = pygame.font.SysFont("Arial", size)
-        surface = font.render(text, True, (255, 255, 255))
-        rect = surface.get_rect(center=(x, y))
-        self.screen.blit(surface, rect)
-
-    # Main loop
+    # ---------------------------------------------------
+    #                   MAIN LOOP
+    # ---------------------------------------------------
     def run(self):
-        rate = rospy.Rate(60)  # 60 fps
+        rate = rospy.Rate(60)
 
         while not rospy.is_shutdown():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    rospy.signal_shutdown("Pygame window closed")
+                    rospy.signal_shutdown("Window closed")
 
-            # Draw according to state
+            self.screen.fill(self.BLACK)
+
             if self.state == "WELCOME":
-                self.draw_welcome()
-            elif self.state == "RUNNING":
-                self.draw_running()
-            elif self.state == "GAME_OVER":
-                self.draw_game_over()
+                # 1. Fondo
+                if self.background_image:
+                    self.screen.blit(self.background_image, (0, 0))
 
-            self.clock.tick(60)
+                # 2. Título WELCOME
+                welcome_text = self.font_welcome.render("WELCOME", True, self.YELLOW)
+                welcome_rect = welcome_text.get_rect(center=(self.screen_width/2, 80))
+                # Borde negro
+                welcome_border = self.font_welcome.render("WELCOME", True, self.BLACK)
+                self.screen.blit(welcome_border, (welcome_rect.x + 2, welcome_rect.y + 2))
+                self.screen.blit(welcome_text, welcome_rect)
+
+                # 3. Info
+                msg_text = "Waiting for User Info from ROS..."
+                info_text = self.font_info.render(msg_text, True, self.WHITE)
+                info_rect = info_text.get_rect(center=(self.screen_width/2, self.screen_height - 50))
+                self.screen.blit(info_text, info_rect)
+            
+            elif self.state == "RUNNING":
+                self.draw_map()
+                self.draw_donkey_kong()
+                self.draw_barrels()
+                self.draw_player_original() 
+                self.draw_ui()
+
+            elif self.state == "GAME_OVER":
+                self.screen.fill((50, 0, 0))
+                font = pygame.font.SysFont("Arial", 60)
+                text = font.render("GAME OVER", True, self.WHITE)
+                score_msg = font.render(f"Final Score: {self.score}", True, self.WHITE)
+                self.screen.blit(text, (250, 200))
+                self.screen.blit(score_msg, (250, 300))
+
+            pygame.display.flip()
             rate.sleep()
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     try:
         PygameNode()
     except rospy.ROSInterruptException:

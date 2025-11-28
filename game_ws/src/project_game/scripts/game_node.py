@@ -8,9 +8,20 @@
 # Lucas Kohley Aguilar     100497018
 
 import rospy
+import random 
 from project_game.msg import user_msg
 from project_game.msg import game_state
 from std_msgs.msg import String, Int64
+
+# --- CLASE BARREL ---
+class Barrel:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.speed_x = random.choice([-3, 3])
+        self.speed_y = 0
+        self.gravity = 0.5
+        self.is_falling = True 
 
 class GameNode:
     def __init__(self):
@@ -21,68 +32,69 @@ class GameNode:
         self.player_username = ""
         self.player_age = 0
 
-        # Start position (Level 1, left side)
         self.player_x = 100
         self.player_y = 400
         self.score = 0
-
-        # States: "WELCOME", "RUNNING", "GAME_OVER"
+        self.lives = 3            # <--- NUEVO: Contador de vidas
         self.current_state = "WELCOME"
 
         # --- PHYSICS VARIABLES ---
         self.vel_y = 0          
-        self.gravity = 2.0      # Gravity
-        self.jump_force = -15   # Jump power
-        self.speed = 8          # Move speed
+        self.gravity = 2.0      
+        self.jump_force = -15   
+        self.speed = 8          
         
-        # Player Hitbox (Approximating your pixel art)
         self.player_w = 30
         self.player_h = 30
-
         self.is_on_ground = False
         self.is_on_ladder = False
 
-        # --- MAP CONFIGURATION (COPIED FROM PYGAME_NODE) ---
+        # --- BARRILES ---
+        self.barrels = []
+        self.last_barrel_time = 0
+        self.barrel_spawn_rate = 2.0 
+
+        # --- MAP CONFIGURATION ---
         self.block_width = 40
         self.block_height = 25
-
-        # 0 = Empty, 1 = Blue Platform, 2 = Yellow Ladder
+        
         self.level_map = [
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 0
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 1
-            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], # 2 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], # 3 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], # 4 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], # 5 
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], # 6 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], # 7 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], # 8
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], # 9
-            [0,0,1,1,1,1,1,1,2,0,0,0,0,1,1,1,1,1,0,0], # 10 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 11 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 12
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 13
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # 14
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 15 
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 16
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 17
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # 18 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 19 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 20
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 21
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], # 22
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  # 23
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
+            [0,0,1,1,1,1,1,1,2,0,0,0,0,1,1,1,1,1,0,0], 
+            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], 
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  
         ]
 
         # --- PUBLISHERS ---
         self.result_publisher = rospy.Publisher('result_information', Int64, queue_size=10)
         self.state_publisher = rospy.Publisher('game_state', game_state, queue_size=10)
+        self.barrel_publisher = rospy.Publisher('barrels_data', String, queue_size=10)
 
         # --- SUBSCRIBERS ---
         rospy.Subscriber("user_information", user_msg, self.callback_user_info)
         rospy.Subscriber("keyboard_control", String, self.callback_keyboard)
 
-        # --- PHYSICS LOOP (60Hz for smoothness) ---
+        # --- PHYSICS LOOP (60Hz) ---
         rospy.Timer(rospy.Duration(0.016), self.update_physics)
 
         rospy.loginfo("GAME_NODE started...")
@@ -93,20 +105,15 @@ class GameNode:
     #                   HELPER: GET TILE TYPE
     # -----------------------------------------------------------
     def get_tile_at(self, x, y):
-        # Convert pixel coordinate to grid index
         col = int(x / self.block_width)
         row = int(y / self.block_height)
-
-        # Check bounds
         if row < 0 or row >= len(self.level_map): return 0
-        if col < 0 or col >= len(self.level_map[0]): return 0
-
+        col = max(0, min(col, len(self.level_map[0]) - 1))
         return self.level_map[row][col]
 
     # -----------------------------------------------------------
     #                   CALLBACKS
     # -----------------------------------------------------------
-
     def callback_user_info(self, msg):
         self.player_name = msg.name
         self.player_username = msg.username
@@ -115,130 +122,180 @@ class GameNode:
 
     def callback_keyboard(self, msg):
         command = msg.data
-
         if self.current_state == "WELCOME":
             self.Game()
             return
-
         if self.current_state == "GAME_OVER":
             self.Welcome()
             return
-
         if self.current_state == "RUNNING":
             self.process_command(command)
-            # End condition (e.g., reaching top platform)
-            # Checking if player is high enough (approx row 2)
             if self.player_y < 100:
                 self.score = 100
                 self.Final()
 
     # -----------------------------------------------------------
-    #                   GAME LOGIC
+    #                   GAME LOGIC (MARIO)
     # -----------------------------------------------------------
-
     def process_command(self, command):
-        # Horizontal Movement
         if command == "LEFT":
             self.player_x -= self.speed
         elif command == "RIGHT":
             self.player_x += self.speed
 
-        # Vertical Movement
+        # Teletransporte Pac-Man
+        screen_limit = 800 
+        if self.player_x > screen_limit:
+            self.player_x = 0
+            safety = 0
+            while self.get_tile_at(self.player_x, self.player_y + self.player_h + 2) == 0 and safety < 20:
+                self.player_x += 20
+                safety += 1
+        elif self.player_x < 0:
+            self.player_x = screen_limit - self.player_w
+            safety = 0
+            while self.get_tile_at(self.player_x, self.player_y + self.player_h + 2) == 0 and safety < 20:
+                self.player_x -= 20
+                safety += 1
+
         if self.is_on_ladder:
-            if command == "UP":
-                self.player_y -= self.speed
-            elif command == "DOWN":
-                self.player_y += self.speed
+            if command == "UP": self.player_y -= self.speed
+            elif command == "DOWN": self.player_y += self.speed
         else:
-            # Jumping (Only if on ground)
             if command == "UP" and self.is_on_ground:
                 self.vel_y = self.jump_force
                 self.is_on_ground = False 
 
     # -----------------------------------------------------------
-    #                   PHYSICS LOOP
+    #             PHYSICS LOOP
     # -----------------------------------------------------------
-
     def update_physics(self, event):
         if self.current_state != "RUNNING":
             return
 
-        # 1. Determine Player's Critical Points
+        self.update_player_physics()
+        self.update_barrels() # <--- Aqui gestionamos movimiento Y COLISIONES
+        self.publish_game_state()
+
+    def update_player_physics(self):
         center_x = self.player_x + (self.player_w / 2)
         center_y = self.player_y + (self.player_h / 2)
         feet_y = self.player_y + self.player_h
 
-        # 2. Check current tile for Ladder (Type 2)
-        # We check the center of the player
         current_tile = self.get_tile_at(center_x, center_y)
-        
-        # Also check slightly below feet to help transition onto ladder
         feet_tile = self.get_tile_at(center_x, feet_y)
+        self.is_on_ladder = (current_tile == 2 or feet_tile == 2)
 
-        if current_tile == 2 or feet_tile == 2:
-            self.is_on_ladder = True
-        else:
-            self.is_on_ladder = False
-
-        # 3. Apply Gravity
         if self.is_on_ladder:
-            self.vel_y = 0 # No gravity on ladder
+            self.vel_y = 0 
         else:
             self.vel_y += self.gravity
             self.player_y += self.vel_y
 
-        # 4. Ground Collision (Platform Type 1)
-        # We only check for ground if we are falling (vel_y > 0) and NOT on a ladder
         self.is_on_ground = False
-        
         if not self.is_on_ladder and self.vel_y >= 0:
-            # Check the tile exactly at our feet
-            # We look 1 pixel deep into the floor to detect collision
-            tile_below_feet = self.get_tile_at(center_x, self.player_y + self.player_h + 1)
-            
-            if tile_below_feet == 1:
-                # We hit a platform!
-                # Calculate the exact Y position of that platform's top
+            tile_below = self.get_tile_at(center_x, self.player_y + self.player_h + 1)
+            if tile_below == 1:
                 row = int((self.player_y + self.player_h + 1) / self.block_height)
-                platform_top_y = row * self.block_height
-                
-                # Snap player to top of platform
-                self.player_y = platform_top_y - self.player_h
+                self.player_y = (row * self.block_height) - self.player_h
                 self.vel_y = 0
                 self.is_on_ground = True
-            
-            # Ground Level fallback (in case map definition fails at very bottom)
             if self.player_y >= 550:
                 self.player_y = 550
                 self.vel_y = 0
                 self.is_on_ground = True
 
-        # 5. Publish State
-        self.publish_game_state()
+    # --- LÓGICA DE BARRILES Y COLISIONES ---
+    def update_barrels(self):
+        # A) Generar barril
+        now = rospy.get_time()
+        if now - self.last_barrel_time > self.barrel_spawn_rate:
+            new_barrel = Barrel(380, 60)
+            self.barrels.append(new_barrel)
+            self.last_barrel_time = now
+
+        barrels_data_str = ""
+        active_barrels = []
+
+        for b in self.barrels:
+            # 1. Movimiento Física Barril
+            b.speed_y += b.gravity
+            b.x += b.speed_x
+            b.y += b.speed_y
+            
+            # 2. Suelo / Rebote
+            center_bx = b.x + 10
+            feet_by = b.y + 20
+            tile_below = self.get_tile_at(center_bx, feet_by)
+            
+            if tile_below == 1: 
+                row = int(feet_by / self.block_height)
+                b.y = (row * self.block_height) - 20
+                b.speed_y = 0
+                if b.is_falling:
+                    b.is_falling = False 
+                    b.speed_x = random.choice([-3, 3])
+            else:
+                b.is_falling = True
+
+            # 3. DETECCIÓN DE COLISIÓN CON MARIO (HITBOX)
+            # Distancia simple: si los centros están cerca (<25 pixels)
+            dx = abs(self.player_x - b.x)
+            dy = abs(self.player_y - b.y)
+            
+            collision = False
+            if dx < 25 and dy < 25:
+                collision = True
+            
+            if collision:
+                # --- JUGADOR GOLPEADO ---
+                self.lives -= 1
+                rospy.logwarn(f"¡AUCH! Vidas restantes: {self.lives}")
+                
+                # Resetear posición de Mario (para que no le den 2 veces seguidas)
+                self.player_x = 100
+                self.player_y = 400
+                
+                # Comprobar si ha perdido
+                if self.lives <= 0:
+                    self.Final()
+                
+                # El barril desaparece al chocar (no se añade a active_barrels)
+                continue 
+
+            # 4. Guardar barril si sigue vivo y en pantalla
+            if b.x > -20 and b.x < 820 and b.y < 650:
+                active_barrels.append(b)
+                barrels_data_str += f"{int(b.x)},{int(b.y)};"
+
+        self.barrels = active_barrels
+        self.barrel_publisher.publish(barrels_data_str)
 
     # -----------------------------------------------------------
     #                   PHASES
     # -----------------------------------------------------------
-
     def Welcome(self):
         self.current_state = "WELCOME"
-        # Start at bottom left
         self.player_x = 80
         self.player_y = 500
         self.score = 0
         self.vel_y = 0
+        self.lives = 3 # Reiniciar vidas
+        self.barrels = []
         rospy.loginfo("--- WELCOME ---")
         self.publish_game_state()
 
     def Game(self):
         self.current_state = "RUNNING"
         self.score = 0
+        self.lives = 3 # Asegurar vidas al empezar
+        self.barrels = []
+        self.last_barrel_time = rospy.get_time()
         rospy.loginfo("--- GAME START ---")
 
     def Final(self):
         self.current_state = "GAME_OVER"
-        rospy.loginfo(f"--- GAME OVER: {self.score} ---")
-        
+        rospy.loginfo(f"--- GAME OVER: Score {self.score} ---")
         msg = Int64()
         msg.data = self.score
         self.result_publisher.publish(msg)
