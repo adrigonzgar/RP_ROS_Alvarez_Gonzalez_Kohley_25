@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# ============
+# COMPILAR
+# ============
+# Compila el workspace y lanza roscore en la misma terminal
+
+WORKSPACE=~/RP_ROS_Alvarez_Gonzalez_Kohley_25/game_ws
+
+echo "📂 Navegando al workspace..."
+cd $WORKSPACE
+
+echo "🔧 Compilando con catkin_make..."
+catkin_make
+
+if [ $? -ne 0 ]; then
+    echo "❌ Error al compilar."
+    exit 1
+fi
+
+echo "⚡ Activando entorno..."
+source devel/setup.bash
+
+echo "🚀 Lanzando ROSCORE..."
+roscore
