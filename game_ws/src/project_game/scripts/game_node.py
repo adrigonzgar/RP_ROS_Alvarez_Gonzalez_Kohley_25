@@ -13,7 +13,7 @@ from project_game.msg import user_msg
 from project_game.msg import game_state
 from std_msgs.msg import String, Int64
 
-# --- CLASE BARREL ---
+# --- CLASES AUXILIARES ---
 class Barrel:
     def __init__(self, x, y):
         self.x = x
@@ -22,6 +22,14 @@ class Barrel:
         self.speed_y = 0
         self.gravity = 0.5
         self.is_falling = True 
+
+class Coin:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 15
+        self.height = 15
+        self.active = True
 
 class GameNode:
     def __init__(self):
@@ -35,7 +43,7 @@ class GameNode:
         self.player_x = 100
         self.player_y = 400
         self.score = 0
-        self.lives = 3            # <--- NUEVO: Contador de vidas
+        self.lives = 3
         self.current_state = "WELCOME"
 
         # --- PHYSICS VARIABLES ---
@@ -53,6 +61,20 @@ class GameNode:
         self.barrels = []
         self.last_barrel_time = 0
         self.barrel_spawn_rate = 2.0 
+
+        # --- MONEDAS (COORDENADAS BASADAS EN EL MAPA) ---
+        # Coordenadas aproximadas sobre las plataformas
+        self.coins = [
+            Coin(200, 500), # Suelo abajo
+            Coin(600, 500), # Suelo abajo
+            Coin(150, 420), # Plataforma 1
+            Coin(700, 420), # Plataforma 1
+            Coin(400, 320), # Plataforma 2 (Centro)
+            Coin(100, 220), # Plataforma 3
+            Coin(750, 220), # Plataforma 3
+            Coin(200, 120), # Plataforma 4
+            Coin(600, 120)  # Plataforma 4
+        ]
 
         # --- MAP CONFIGURATION ---
         self.block_width = 40
@@ -89,6 +111,8 @@ class GameNode:
         self.result_publisher = rospy.Publisher('result_information', Int64, queue_size=10)
         self.state_publisher = rospy.Publisher('game_state', game_state, queue_size=10)
         self.barrel_publisher = rospy.Publisher('barrels_data', String, queue_size=10)
+        # NUEVO: Publicador de monedas
+        self.coins_publisher = rospy.Publisher('coins_data', String, queue_size=10)
 
         # --- SUBSCRIBERS ---
         rospy.Subscriber("user_information", user_msg, self.callback_user_info)
@@ -130,8 +154,9 @@ class GameNode:
             return
         if self.current_state == "RUNNING":
             self.process_command(command)
+            # Victoria al llegar arriba
             if self.player_y < 100:
-                self.score = 100
+                self.score += 500 # Bonus por ganar
                 self.Final()
 
     # -----------------------------------------------------------
@@ -143,7 +168,6 @@ class GameNode:
         elif command == "RIGHT":
             self.player_x += self.speed
 
-        # Teletransporte Pac-Man
         screen_limit = 800 
         if self.player_x > screen_limit:
             self.player_x = 0
@@ -174,7 +198,8 @@ class GameNode:
             return
 
         self.update_player_physics()
-        self.update_barrels() # <--- Aqui gestionamos movimiento Y COLISIONES
+        self.update_barrels()
+        self.update_coins() # <--- NUEVO: Actualizar Monedas
         self.publish_game_state()
 
     def update_player_physics(self):
@@ -205,9 +230,7 @@ class GameNode:
                 self.vel_y = 0
                 self.is_on_ground = True
 
-    # --- LÓGICA DE BARRILES Y COLISIONES ---
     def update_barrels(self):
-        # A) Generar barril
         now = rospy.get_time()
         if now - self.last_barrel_time > self.barrel_spawn_rate:
             new_barrel = Barrel(380, 60)
@@ -218,12 +241,10 @@ class GameNode:
         active_barrels = []
 
         for b in self.barrels:
-            # 1. Movimiento Física Barril
             b.speed_y += b.gravity
             b.x += b.speed_x
             b.y += b.speed_y
             
-            # 2. Suelo / Rebote
             center_bx = b.x + 10
             feet_by = b.y + 20
             tile_below = self.get_tile_at(center_bx, feet_by)
@@ -238,38 +259,47 @@ class GameNode:
             else:
                 b.is_falling = True
 
-            # 3. DETECCIÓN DE COLISIÓN CON MARIO (HITBOX)
-            # Distancia simple: si los centros están cerca (<25 pixels)
-            dx = abs(self.player_x - b.x)
-            dy = abs(self.player_y - b.y)
-            
-            collision = False
-            if dx < 25 and dy < 25:
-                collision = True
-            
-            if collision:
-                # --- JUGADOR GOLPEADO ---
+            # Colisión con Mario
+            if abs(self.player_x - b.x) < 25 and abs(self.player_y - b.y) < 25:
                 self.lives -= 1
-                rospy.logwarn(f"¡AUCH! Vidas restantes: {self.lives}")
-                
-                # Resetear posición de Mario (para que no le den 2 veces seguidas)
+                rospy.logwarn(f"¡GOLPE! Vidas: {self.lives}")
                 self.player_x = 100
                 self.player_y = 400
-                
-                # Comprobar si ha perdido
                 if self.lives <= 0:
                     self.Final()
-                
-                # El barril desaparece al chocar (no se añade a active_barrels)
                 continue 
 
-            # 4. Guardar barril si sigue vivo y en pantalla
             if b.x > -20 and b.x < 820 and b.y < 650:
                 active_barrels.append(b)
                 barrels_data_str += f"{int(b.x)},{int(b.y)};"
 
         self.barrels = active_barrels
         self.barrel_publisher.publish(barrels_data_str)
+
+    # --- NUEVA LÓGICA DE MONEDAS ---
+    def update_coins(self):
+        coins_data_str = ""
+        remaining_coins = []
+        
+        for c in self.coins:
+            if c.active:
+                # Comprobar si Mario toca la moneda
+                # Distancia euclídea simple o caja
+                dx = abs(self.player_x - c.x)
+                dy = abs(self.player_y - c.y)
+                
+                if dx < 30 and dy < 30:
+                    # ¡MONEDA RECOGIDA!
+                    self.score += 50 # Puntos por moneda
+                    c.active = False # Desactivar
+                    rospy.loginfo(f"Coin collected! Score: {self.score}")
+                else:
+                    # Si no la ha cogido, la guardamos para enviarla
+                    remaining_coins.append(c)
+                    coins_data_str += f"{c.x},{c.y};"
+        
+        # Publicar monedas activas para pintarlas
+        self.coins_publisher.publish(coins_data_str)
 
     # -----------------------------------------------------------
     #                   PHASES
@@ -280,16 +310,20 @@ class GameNode:
         self.player_y = 500
         self.score = 0
         self.vel_y = 0
-        self.lives = 3 # Reiniciar vidas
+        self.lives = 3
         self.barrels = []
+        # Reactivar todas las monedas al reiniciar
+        for c in self.coins: c.active = True
         rospy.loginfo("--- WELCOME ---")
         self.publish_game_state()
 
     def Game(self):
         self.current_state = "RUNNING"
         self.score = 0
-        self.lives = 3 # Asegurar vidas al empezar
+        self.lives = 3
         self.barrels = []
+        # Reactivar todas las monedas
+        for c in self.coins: c.active = True
         self.last_barrel_time = rospy.get_time()
         rospy.loginfo("--- GAME START ---")
 
@@ -307,6 +341,7 @@ class GameNode:
         msg.player_y = int(self.player_y)
         msg.score = self.score
         msg.state = self.current_state
+        msg.lives = self.lives 
         self.state_publisher.publish(msg)
 
 if __name__ == '__main__':

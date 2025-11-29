@@ -18,7 +18,6 @@ class PygameNode:
         rospy.init_node("pygame_node")
         rospy.loginfo("PYGAME_NODE started.")
 
-        # --- Init pygame ---
         pygame.init()
         self.screen_width = 800
         self.screen_height = 600
@@ -27,46 +26,42 @@ class PygameNode:
 
         self.clock = pygame.time.Clock()
 
-        # --- Game state variables ---
+        # --- Variables ---
         self.state = "WELCOME"
         self.player_x = 100
         self.player_y = 300
         self.score = 0
         self.lives = 3
         self.barrels_data = []
+        self.coins_data = [] # <--- LISTA DE MONEDAS A DIBUJAR
         
         # --- COLORES ---
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
+        self.RED = (255, 0, 0)
         self.YELLOW = (255, 255, 0) 
         self.BLUE_PLATFORM = (0, 0, 255)
         self.YELLOW_LADDER = (255, 255, 0)
         
-        # Colores Mario
+        # Sprites
         self.M_SHIRT = (255, 0, 0)      
         self.M_OVERALLS = (0, 0, 255)   
         self.M_SKIN = (255, 200, 150)   
         self.M_SHOES = (139, 69, 19)    
-
-        # Colores Kong
         self.DK_BROWN = (139, 69, 19)
         self.DK_PEACH = (222, 184, 135)
         self.DK_EYES = (0, 0, 0)
-        
-        # Color Barriles
         self.BARREL_COLOR = (160, 82, 45) 
+        self.COIN_COLOR = (255, 215, 0) # Dorado para las monedas
 
-        # --- CARGAR RECURSOS GRÁFICOS (FIX RUTA) ---
         self.background_image = self.load_resources()
-        
-        # Fuentes
         self.font_welcome = pygame.font.SysFont("Arial Black", 70, bold=True)
+        self.font_gameover = pygame.font.SysFont("Arial Black", 80, bold=True)
         self.font_info = pygame.font.SysFont("Arial", 30)
 
         self.block_width = 40
         self.block_height = 25
 
-        # Mapa Visual
         self.level_map = [
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
@@ -94,43 +89,32 @@ class PygameNode:
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  
         ]
 
-        # --- Subscriber ---
+        # Subscribers
         rospy.Subscriber("game_state", game_state, self.callback_game_state)
         rospy.Subscriber("barrels_data", String, self.callback_barrels)
+        # NUEVO: Suscripción a monedas
+        rospy.Subscriber("coins_data", String, self.callback_coins)
         
         self.run()
 
-    # --- FUNCIÓN CORREGIDA PARA ENCONTRAR LA IMAGEN ---
     def load_resources(self):
         image_name = "Pantalla_Carga_DK.jpg"
-        
-        # 1. Obtenemos la ruta absoluta de DONDE ESTÁ ESTE SCRIPT
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # 2. Construimos la ruta completa a la imagen
         image_path = os.path.join(script_dir, image_name)
-        
-        rospy.loginfo(f"Buscando imagen en: {image_path}")
-
         if os.path.exists(image_path):
             try:
                 img = pygame.image.load(image_path)
-                img_scaled = pygame.transform.scale(img, (self.screen_width, self.screen_height))
-                rospy.loginfo("Imagen de fondo cargada EXITOSAMENTE.")
-                return img_scaled
-            except Exception as e:
-                rospy.logerr(f"Error al leer el archivo de imagen: {e}")
-                return None
-        else:
-            rospy.logwarn(f"NO SE ENCUENTRA LA IMAGEN en {image_path}. Usando fondo negro.")
-            return None
+                return pygame.transform.scale(img, (self.screen_width, self.screen_height))
+            except: return None
+        return None
 
     def callback_game_state(self, msg):
         self.state = msg.state
         self.player_x = msg.player_x
         self.player_y = msg.player_y
         self.score = msg.score
-        self.lives = msg.lives
+        if hasattr(msg, 'lives'):
+            self.lives = msg.lives
 
     def callback_barrels(self, msg):
         raw_data = msg.data
@@ -142,12 +126,25 @@ class PygameNode:
                     coords = item.split(',')
                     try:
                         new_barrels.append((int(coords[0]), int(coords[1])))
-                    except:
-                        pass
+                    except: pass
         self.barrels_data = new_barrels
 
+    # --- NUEVO: Callback para leer monedas ---
+    def callback_coins(self, msg):
+        raw_data = msg.data
+        new_coins = []
+        if raw_data:
+            items = raw_data.split(';')
+            for item in items:
+                if ',' in item:
+                    coords = item.split(',')
+                    try:
+                        new_coins.append((int(coords[0]), int(coords[1])))
+                    except: pass
+        self.coins_data = new_coins
+
     # ---------------------------------------------------
-    #                DIBUJADO (DRAWING)
+    #                DIBUJADO
     # ---------------------------------------------------
 
     def draw_map(self):
@@ -155,7 +152,6 @@ class PygameNode:
             for col_index, tile in enumerate(row):
                 x = col_index * self.block_width
                 y = row_index * self.block_height
-                
                 if tile == 1: 
                     pygame.draw.rect(self.screen, self.BLUE_PLATFORM, (x, y, self.block_width, self.block_height))
                 elif tile == 2: 
@@ -167,22 +163,15 @@ class PygameNode:
     def draw_player_original(self):
         x = self.player_x
         y = self.player_y
-        # 1. Cabeza
         pygame.draw.rect(self.screen, self.M_SKIN, (x + 4, y, 16, 10))
-        # 2. Gorra
         pygame.draw.rect(self.screen, self.M_SHIRT, (x, y, 24, 4))
         pygame.draw.rect(self.screen, self.M_SHIRT, (x + 4, y - 2, 16, 4)) 
-        # 3. Cuerpo
         pygame.draw.rect(self.screen, self.M_SHIRT, (x + 2, y + 10, 20, 10))
-        # 4. Peto
         pygame.draw.rect(self.screen, self.M_OVERALLS, (x + 4, y + 16, 16, 10))
-        # 5. Piernas
         pygame.draw.rect(self.screen, self.M_OVERALLS, (x + 2, y + 26, 6, 4)) 
         pygame.draw.rect(self.screen, self.M_OVERALLS, (x + 16, y + 26, 6, 4)) 
-        # Zapatos
         pygame.draw.rect(self.screen, self.M_SHOES, (x, y + 30, 8, 4))
         pygame.draw.rect(self.screen, self.M_SHOES, (x + 16, y + 30, 8, 4))
-        # Manos
         pygame.draw.rect(self.screen, self.M_SKIN, (x - 2, y + 14, 4, 4))
         pygame.draw.rect(self.screen, self.M_SKIN, (x + 22, y + 14, 4, 4))
 
@@ -202,19 +191,23 @@ class PygameNode:
             pygame.draw.circle(self.screen, self.BARREL_COLOR, (bx + 10, by + 10), 10)
             pygame.draw.circle(self.screen, (100, 50, 20), (bx + 10, by + 10), 6)
 
+    # --- NUEVO: PINTAR MONEDAS ---
+    def draw_coins(self):
+        for (cx, cy) in self.coins_data:
+            # Moneda amarilla
+            pygame.draw.circle(self.screen, self.COIN_COLOR, (cx + 15, cy + 15), 8)
+            # Brillo interior
+            pygame.draw.circle(self.screen, self.YELLOW, (cx + 15, cy + 15), 4)
+
     def draw_ui(self):
         font = pygame.font.SysFont("Arial", 24)
         score_text = font.render(f"Score: {self.score}", True, self.WHITE)
         lives_text = font.render(f"Lives: {self.lives}", True, self.WHITE)
         self.screen.blit(score_text, (10, 10))
-        self.screen.blit(lives_text, (700, 10)) 
+        self.screen.blit(lives_text, (700, 10))
 
-    # ---------------------------------------------------
-    #                   MAIN LOOP
-    # ---------------------------------------------------
     def run(self):
         rate = rospy.Rate(60)
-
         while not rospy.is_shutdown():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -223,19 +216,13 @@ class PygameNode:
             self.screen.fill(self.BLACK)
 
             if self.state == "WELCOME":
-                # 1. Fondo
                 if self.background_image:
                     self.screen.blit(self.background_image, (0, 0))
-
-                # 2. Título WELCOME
                 welcome_text = self.font_welcome.render("WELCOME", True, self.YELLOW)
                 welcome_rect = welcome_text.get_rect(center=(self.screen_width/2, 80))
-                # Borde negro
                 welcome_border = self.font_welcome.render("WELCOME", True, self.BLACK)
                 self.screen.blit(welcome_border, (welcome_rect.x + 2, welcome_rect.y + 2))
                 self.screen.blit(welcome_text, welcome_rect)
-
-                # 3. Info
                 msg_text = "Waiting for User Info from ROS..."
                 info_text = self.font_info.render(msg_text, True, self.WHITE)
                 info_rect = info_text.get_rect(center=(self.screen_width/2, self.screen_height - 50))
@@ -243,6 +230,7 @@ class PygameNode:
             
             elif self.state == "RUNNING":
                 self.draw_map()
+                self.draw_coins() # <--- DIBUJAR MONEDAS
                 self.draw_donkey_kong()
                 self.draw_barrels()
                 self.draw_player_original() 
@@ -255,6 +243,9 @@ class PygameNode:
                 score_msg = font.render(f"Final Score: {self.score}", True, self.WHITE)
                 self.screen.blit(text, (250, 200))
                 self.screen.blit(score_msg, (250, 300))
+                restart_msg = self.font_info.render("Press any key to Restart", True, self.YELLOW)
+                restart_rect = restart_msg.get_rect(center=(self.screen_width/2, self.screen_height/2 + 100))
+                self.screen.blit(restart_msg, restart_rect)
 
             pygame.display.flip()
             rate.sleep()
