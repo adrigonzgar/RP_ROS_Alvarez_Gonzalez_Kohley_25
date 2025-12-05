@@ -33,7 +33,7 @@ class PygameNode:
         self.score = 0
         self.lives = 3
         self.barrels_data = []
-        self.coins_data = [] # <--- LISTA DE MONEDAS A DIBUJAR
+        self.coins_data = [] 
         
         # --- COLORES ---
         self.BLACK = (0, 0, 0)
@@ -43,7 +43,7 @@ class PygameNode:
         self.BLUE_PLATFORM = (0, 0, 255)
         self.YELLOW_LADDER = (255, 255, 0)
         
-        # Sprites
+        # Sprites Colors
         self.M_SHIRT = (255, 0, 0)      
         self.M_OVERALLS = (0, 0, 255)   
         self.M_SKIN = (255, 200, 150)   
@@ -52,7 +52,8 @@ class PygameNode:
         self.DK_PEACH = (222, 184, 135)
         self.DK_EYES = (0, 0, 0)
         self.BARREL_COLOR = (160, 82, 45) 
-        self.COIN_COLOR = (255, 215, 0) # Dorado para las monedas
+        self.COIN_COLOR = (255, 215, 0) 
+        self.CROWN_COLOR = (255, 223, 0)
 
         self.background_image = self.load_resources()
         self.font_welcome = pygame.font.SysFont("Arial Black", 70, bold=True)
@@ -62,29 +63,30 @@ class PygameNode:
         self.block_width = 40
         self.block_height = 25
 
+        # --- MAP CONFIGURATION ---
         self.level_map = [
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
             [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
             [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
-            [0,0,1,1,1,1,1,1,2,0,0,0,0,1,1,1,1,1,0,0], 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
             [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
+            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0], 
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], 
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], 
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], 
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], 
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  
         ]
@@ -92,7 +94,6 @@ class PygameNode:
         # Subscribers
         rospy.Subscriber("game_state", game_state, self.callback_game_state)
         rospy.Subscriber("barrels_data", String, self.callback_barrels)
-        # NUEVO: Suscripción a monedas
         rospy.Subscriber("coins_data", String, self.callback_coins)
         
         self.run()
@@ -129,7 +130,6 @@ class PygameNode:
                     except: pass
         self.barrels_data = new_barrels
 
-    # --- NUEVO: Callback para leer monedas ---
     def callback_coins(self, msg):
         raw_data = msg.data
         new_coins = []
@@ -144,7 +144,7 @@ class PygameNode:
         self.coins_data = new_coins
 
     # ---------------------------------------------------
-    #                DIBUJADO
+    #                DRAWING
     # ---------------------------------------------------
 
     def draw_map(self):
@@ -176,8 +176,8 @@ class PygameNode:
         pygame.draw.rect(self.screen, self.M_SKIN, (x + 22, y + 14, 4, 4))
 
     def draw_donkey_kong(self):
-        dk_x = 360  
-        dk_y = 12   
+        dk_x = 370  
+        dk_y = 90    # ADJUSTED: Moves DK up to sit on the platform
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x, dk_y + 20, 60, 40))
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 10, dk_y, 40, 30))
         pygame.draw.rect(self.screen, self.DK_PEACH, (dk_x + 15, dk_y + 5, 30, 20))
@@ -186,17 +186,23 @@ class PygameNode:
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x - 10, dk_y + 25, 15, 25))
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 55, dk_y + 25, 15, 25))
 
+    def draw_crown(self):
+        cx = 390
+        cy = 45
+        pygame.draw.rect(self.screen, self.CROWN_COLOR, (cx, cy, 30, 20))
+        pygame.draw.polygon(self.screen, self.CROWN_COLOR, [(cx, cy), (cx-5, cy-10), (cx+10, cy)])
+        pygame.draw.polygon(self.screen, self.CROWN_COLOR, [(cx+10, cy), (cx+15, cy-15), (cx+20, cy)])
+        pygame.draw.polygon(self.screen, self.CROWN_COLOR, [(cx+20, cy), (cx+35, cy-10), (cx+30, cy)])
+        pygame.draw.circle(self.screen, self.RED, (cx+15, cy+10), 5)
+
     def draw_barrels(self):
         for (bx, by) in self.barrels_data:
             pygame.draw.circle(self.screen, self.BARREL_COLOR, (bx + 10, by + 10), 10)
             pygame.draw.circle(self.screen, (100, 50, 20), (bx + 10, by + 10), 6)
 
-    # --- NUEVO: PINTAR MONEDAS ---
     def draw_coins(self):
         for (cx, cy) in self.coins_data:
-            # Moneda amarilla
             pygame.draw.circle(self.screen, self.COIN_COLOR, (cx + 15, cy + 15), 8)
-            # Brillo interior
             pygame.draw.circle(self.screen, self.YELLOW, (cx + 15, cy + 15), 4)
 
     def draw_ui(self):
@@ -230,8 +236,9 @@ class PygameNode:
             
             elif self.state == "RUNNING":
                 self.draw_map()
-                self.draw_coins() # <--- DIBUJAR MONEDAS
+                self.draw_crown()
                 self.draw_donkey_kong()
+                self.draw_coins() 
                 self.draw_barrels()
                 self.draw_player_original() 
                 self.draw_ui()

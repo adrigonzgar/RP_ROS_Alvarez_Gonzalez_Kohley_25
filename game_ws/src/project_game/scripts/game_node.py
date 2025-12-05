@@ -13,11 +13,10 @@ from project_game.msg import user_msg
 from project_game.msg import game_state
 from std_msgs.msg import String, Int64
 
-# --- IMPORTAMOS LOS SERVICIOS (AMBOS) ---
+# --- IMPORT SERVICES ---
 from project_game.srv import GetUserScore, GetUserScoreResponse
 from project_game.srv import SetGameDifficulty, SetGameDifficultyResponse
 
-# --- CLASES AUXILIARES ---
 class Barrel:
     def __init__(self, x, y):
         self.x = x
@@ -44,8 +43,10 @@ class GameNode:
         self.player_username = "Unknown"
         self.player_age = 0
 
-        self.player_x = 100
-        self.player_y = 400
+        # Mario Start Position (Standing on floor Y=550)
+        self.player_x = 50
+        self.player_y = 520 
+        
         self.score = 0
         self.lives = 3
         self.current_state = "WELCOME"
@@ -61,48 +62,49 @@ class GameNode:
         self.is_on_ground = False
         self.is_on_ladder = False
 
-        # --- BARRILES & DIFICULTAD ---
+        # --- BARRELS & DIFFICULTY ---
         self.barrels = []
         self.last_barrel_time = 0
-        self.barrel_spawn_rate = 2.0 # Dificultad por defecto (MEDIUM)
+        self.barrel_spawn_rate = 2.0 
 
-        # --- MONEDAS ---
+        # --- COINS CONFIGURATION (RAISED) ---
+        # Calculation: Platform Y - 30 (to float above ground)
         self.coins = [
-            Coin(200, 500), Coin(600, 500),
-            Coin(150, 420), Coin(700, 420),
-            Coin(400, 320),
-            Coin(100, 220), Coin(750, 220),
-            Coin(200, 120), Coin(600, 120)
+            Coin(100, 520), Coin(700, 520), # Floor (Y=550 -> 520)
+            Coin(150, 420), Coin(650, 420), # Low Sides (Y=450 -> 420)
+            Coin(250, 320), Coin(550, 320), # Mid Sides (Y=350 -> 320)
+            Coin(400, 220),                 # Center Platform (Y=250 -> 220)
+            Coin(380, 120), Coin(420, 120)  # Near DK (Y=150 -> 120)
         ]
 
-        # --- MAP CONFIGURATION ---
+        # --- MAP CONFIGURATION (PYRAMID STYLE) ---
         self.block_width = 40
         self.block_height = 25
         self.level_map = [
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0], 
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0], 
-            [0,0,1,1,1,1,1,1,2,0,0,0,0,1,1,1,1,1,0,0], 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], 
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], 
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], 
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 0
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 1
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 2 (Crown Area)
+            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], # 3 (Small Top Platform Y=75)
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0], # 4
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0], # 5
+            [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0], # 6 (DK Platform Y=150)
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 7
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 8
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 9
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], # 10 (Long Mid Y=250)
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 11
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 12
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 13
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # 14 (Two Sides Y=350)
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 15
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 16
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 17
+            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0], # 18 (Lower Sides Y=450)
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], # 19
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], # 20
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], # 21
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], # 22 (Floor Y=550)
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  # 23
         ]
 
         # --- PUBLISHERS ---
@@ -111,7 +113,7 @@ class GameNode:
         self.barrel_publisher = rospy.Publisher('barrels_data', String, queue_size=10)
         self.coins_publisher = rospy.Publisher('coins_data', String, queue_size=10)
 
-        # --- SERVICES (SERVIDORES) ---
+        # --- SERVICES ---
         rospy.Service('user_score', GetUserScore, self.handle_get_score)
         rospy.Service('difficulty', SetGameDifficulty, self.handle_set_difficulty)
 
@@ -129,31 +131,24 @@ class GameNode:
     #                   SERVICE CALLBACKS
     # -----------------------------------------------------------
     def handle_get_score(self, req):
-        """Devuelve la puntuación si el nombre coincide"""
-        rospy.loginfo(f"Service Request: Score for {req.username}")
         if req.username == self.player_username:
             return GetUserScoreResponse(self.score)
         else:
             return GetUserScoreResponse(0)
 
     def handle_set_difficulty(self, req):
-        """Cambia la dificultad SOLO si estamos en la fase WELCOME"""
-        rospy.loginfo(f"Service Request: Set Difficulty to {req.change_difficulty}")
-        
-        # Regla del PDF: Solo en fase 1
         if self.current_state != "WELCOME":
             return SetGameDifficultyResponse(False, "Error: You can only change difficulty in the Start Screen!")
 
         diff = req.change_difficulty.lower()
-        
         if diff == "easy":
-            self.barrel_spawn_rate = 4.0 # Muy lento
+            self.barrel_spawn_rate = 4.0 
             return SetGameDifficultyResponse(True, "Difficulty set to EASY")
         elif diff == "medium":
-            self.barrel_spawn_rate = 2.0 # Normal
+            self.barrel_spawn_rate = 2.0 
             return SetGameDifficultyResponse(True, "Difficulty set to MEDIUM")
         elif diff == "hard":
-            self.barrel_spawn_rate = 1.0 # Muy rápido
+            self.barrel_spawn_rate = 1.0 
             return SetGameDifficultyResponse(True, "Difficulty set to HARD")
         else:
             return SetGameDifficultyResponse(False, "Invalid difficulty. Use: easy, medium, hard")
@@ -187,31 +182,29 @@ class GameNode:
             return
         if self.current_state == "RUNNING":
             self.process_command(command)
-            if self.player_y < 100:
-                self.score += 500
+            
+            # --- WIN CONDITION: REACH THE CROWN ---
+            dist_to_crown = abs(self.player_x - 380) + abs(self.player_y - 50)
+            if dist_to_crown < 50:
+                self.score += 1000
                 self.Final()
 
     # -----------------------------------------------------------
     #                   GAME LOGIC
     # -----------------------------------------------------------
     def process_command(self, command):
+        # 1. Update Position
         if command == "LEFT": self.player_x -= self.speed
         elif command == "RIGHT": self.player_x += self.speed
 
+        # 2. Screen Wrapping (Teleport logic)
         screen_limit = 800 
         if self.player_x > screen_limit:
             self.player_x = 0
-            safety = 0
-            while self.get_tile_at(self.player_x, self.player_y + self.player_h + 2) == 0 and safety < 20:
-                self.player_x += 20
-                safety += 1
         elif self.player_x < 0:
             self.player_x = screen_limit - self.player_w
-            safety = 0
-            while self.get_tile_at(self.player_x, self.player_y + self.player_h + 2) == 0 and safety < 20:
-                self.player_x -= 20
-                safety += 1
 
+        # 3. Vertical / Jump Logic
         if self.is_on_ladder:
             if command == "UP": self.player_y -= self.speed
             elif command == "DOWN": self.player_y += self.speed
@@ -248,15 +241,18 @@ class GameNode:
                 self.player_y = (row * self.block_height) - self.player_h
                 self.vel_y = 0
                 self.is_on_ground = True
-            if self.player_y >= 550:
-                self.player_y = 550
+            
+            # Floor safety
+            if self.player_y >= 520:
+                self.player_y = 520
                 self.vel_y = 0
                 self.is_on_ground = True
 
     def update_barrels(self):
         now = rospy.get_time()
         if now - self.last_barrel_time > self.barrel_spawn_rate:
-            new_barrel = Barrel(380, 60)
+            # Spawn slightly below the crown
+            new_barrel = Barrel(400, 150)
             self.barrels.append(new_barrel)
             self.last_barrel_time = now
 
@@ -283,9 +279,9 @@ class GameNode:
 
             if abs(self.player_x - b.x) < 25 and abs(self.player_y - b.y) < 25:
                 self.lives -= 1
-                rospy.logwarn(f"¡GOLPE! Vidas: {self.lives}")
-                self.player_x = 100
-                self.player_y = 400
+                rospy.logwarn(f"HIT! Lives: {self.lives}")
+                self.player_x = 50 
+                self.player_y = 520
                 if self.lives <= 0: self.Final()
                 continue 
 
@@ -315,8 +311,8 @@ class GameNode:
     # -----------------------------------------------------------
     def Welcome(self):
         self.current_state = "WELCOME"
-        self.player_x = 80
-        self.player_y = 500
+        self.player_x = 50
+        self.player_y = 520
         self.score = 0
         self.vel_y = 0
         self.lives = 3
