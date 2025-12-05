@@ -9,6 +9,7 @@
 
 import rospy
 from project_game.msg import user_msg
+from project_game.srv import GetUserScore # Importamos el servicio
 from std_msgs.msg import Int64
 
 class ResultNode:
@@ -16,14 +17,13 @@ class ResultNode:
         rospy.init_node('result_node', anonymous=True)
         
         self.username = "Unknown"
-        self.score = 0
         
-        # --- SUBSCRIBERS ---
-        # [cite_start]1. Recibir info del usuario (para saber quién jugó) [cite: 143]
+        # Suscriptor para saber quién juega
         rospy.Subscriber("user_information", user_msg, self.callback_user)
         
-        # [cite_start]2. Recibir puntuación final desde GAME_NODE [cite: 144]
-        rospy.Subscriber("result_information", Int64, self.callback_result)
+        # Suscriptor para saber CUÁNDO acaba el juego
+        # (Usamos el topic antiguo solo como "señal" de que ha terminado)
+        rospy.Subscriber("result_information", Int64, self.callback_game_over)
         
         rospy.loginfo("RESULT_NODE started. Waiting for game results...")
         rospy.spin()
@@ -32,21 +32,32 @@ class ResultNode:
         self.username = msg.username
         rospy.loginfo(f"Player identified: {self.username}")
 
-    def callback_result(self, msg):
+    def callback_game_over(self, msg):
         """
-        Se activa cuando recibe la puntuación final.
-        [cite_start]Muestra el mensaje de GAME OVER. [cite: 145]
+        Cuando recibimos la señal de Game Over, 
+        LLAMAMOS AL SERVICIO para pedir la puntuación oficial.
         """
-        self.score = msg.data
-        rospy.loginfo("Final score received.")
+        rospy.loginfo("Game Over signal received. Requesting score via SERVICE...")
         
-        # Mensaje final en pantalla
-        print("\n" + "="*30)
-        print("       GAME OVER")
-        print("="*30)
-        print(f" PLAYER: {self.username}")
-        print(f" FINAL SCORE: {self.score}")
-        print("="*30 + "\n")
+        # 1. Esperar a que el servicio esté disponible
+        rospy.wait_for_service('user_score')
+        
+        try:
+            # 2. Crear la conexión con el servicio
+            get_score_service = rospy.ServiceProxy('user_score', GetUserScore)
+            
+            # 3. Hacer la petición (Request) enviando el nombre de usuario
+            response = get_score_service(self.username)
+            
+            # 4. Mostrar la respuesta (Response)
+            print("\n" + "="*30)
+            print(f"   GAME OVER REPORT for {self.username}")
+            print("="*30)
+            print(f"   FINAL SCORE (from Service): {response.score}")
+            print("="*30 + "\n")
+            
+        except rospy.ServiceException as e:
+            rospy.logerr(f"Service call failed: {e}")
 
 if __name__ == '__main__':
     try:

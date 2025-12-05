@@ -13,7 +13,11 @@ from project_game.msg import user_msg
 from project_game.msg import game_state
 from std_msgs.msg import String, Int64
 
-# --- AUXILIARY CLASSES ---
+# --- IMPORTAMOS LOS SERVICIOS (AMBOS) ---
+from project_game.srv import GetUserScore, GetUserScoreResponse
+from project_game.srv import SetGameDifficulty, SetGameDifficultyResponse
+
+# --- CLASES AUXILIARES ---
 class Barrel:
     def __init__(self, x, y):
         self.x = x
@@ -37,7 +41,7 @@ class GameNode:
 
         # --- GAME VARIABLES ---
         self.player_name = ""
-        self.player_username = ""
+        self.player_username = "Unknown"
         self.player_age = 0
 
         self.player_x = 100
@@ -57,28 +61,23 @@ class GameNode:
         self.is_on_ground = False
         self.is_on_ladder = False
 
-        # --- BARRELS ---
+        # --- BARRILES & DIFICULTAD ---
         self.barrels = []
         self.last_barrel_time = 0
-        self.barrel_spawn_rate = 2.0 
+        self.barrel_spawn_rate = 2.0 # Dificultad por defecto (MEDIUM)
 
-        # --- COINS (COORDINATES BASED ON MAP) ---
+        # --- MONEDAS ---
         self.coins = [
-            Coin(200, 500), # Floor bottom
-            Coin(600, 500), # Floor bottom
-            Coin(150, 420), # Platform 1
-            Coin(700, 420), # Platform 1
-            Coin(400, 320), # Platform 2 (Center)
-            Coin(100, 220), # Platform 3
-            Coin(750, 220), # Platform 3
-            Coin(200, 120), # Platform 4
-            Coin(600, 120)  # Platform 4
+            Coin(200, 500), Coin(600, 500),
+            Coin(150, 420), Coin(700, 420),
+            Coin(400, 320),
+            Coin(100, 220), Coin(750, 220),
+            Coin(200, 120), Coin(600, 120)
         ]
 
         # --- MAP CONFIGURATION ---
         self.block_width = 40
         self.block_height = 25
-        
         self.level_map = [
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], 
@@ -112,16 +111,52 @@ class GameNode:
         self.barrel_publisher = rospy.Publisher('barrels_data', String, queue_size=10)
         self.coins_publisher = rospy.Publisher('coins_data', String, queue_size=10)
 
+        # --- SERVICES (SERVIDORES) ---
+        rospy.Service('user_score', GetUserScore, self.handle_get_score)
+        rospy.Service('difficulty', SetGameDifficulty, self.handle_set_difficulty)
+
         # --- SUBSCRIBERS ---
         rospy.Subscriber("user_information", user_msg, self.callback_user_info)
         rospy.Subscriber("keyboard_control", String, self.callback_keyboard)
 
-        # --- PHYSICS LOOP (60Hz) ---
+        # --- LOOP ---
         rospy.Timer(rospy.Duration(0.016), self.update_physics)
-
         rospy.loginfo("GAME_NODE started...")
         self.publish_game_state()
         rospy.spin()
+
+    # -----------------------------------------------------------
+    #                   SERVICE CALLBACKS
+    # -----------------------------------------------------------
+    def handle_get_score(self, req):
+        """Devuelve la puntuación si el nombre coincide"""
+        rospy.loginfo(f"Service Request: Score for {req.username}")
+        if req.username == self.player_username:
+            return GetUserScoreResponse(self.score)
+        else:
+            return GetUserScoreResponse(0)
+
+    def handle_set_difficulty(self, req):
+        """Cambia la dificultad SOLO si estamos en la fase WELCOME"""
+        rospy.loginfo(f"Service Request: Set Difficulty to {req.change_difficulty}")
+        
+        # Regla del PDF: Solo en fase 1
+        if self.current_state != "WELCOME":
+            return SetGameDifficultyResponse(False, "Error: You can only change difficulty in the Start Screen!")
+
+        diff = req.change_difficulty.lower()
+        
+        if diff == "easy":
+            self.barrel_spawn_rate = 4.0 # Muy lento
+            return SetGameDifficultyResponse(True, "Difficulty set to EASY")
+        elif diff == "medium":
+            self.barrel_spawn_rate = 2.0 # Normal
+            return SetGameDifficultyResponse(True, "Difficulty set to MEDIUM")
+        elif diff == "hard":
+            self.barrel_spawn_rate = 1.0 # Muy rápido
+            return SetGameDifficultyResponse(True, "Difficulty set to HARD")
+        else:
+            return SetGameDifficultyResponse(False, "Invalid difficulty. Use: easy, medium, hard")
 
     # -----------------------------------------------------------
     #                   HELPER: GET TILE TYPE
@@ -152,19 +187,16 @@ class GameNode:
             return
         if self.current_state == "RUNNING":
             self.process_command(command)
-            # Victory when reaching top
             if self.player_y < 100:
-                self.score += 500 # Bonus for winning
+                self.score += 500
                 self.Final()
 
     # -----------------------------------------------------------
-    #                   GAME LOGIC (MARIO)
+    #                   GAME LOGIC
     # -----------------------------------------------------------
     def process_command(self, command):
-        if command == "LEFT":
-            self.player_x -= self.speed
-        elif command == "RIGHT":
-            self.player_x += self.speed
+        if command == "LEFT": self.player_x -= self.speed
+        elif command == "RIGHT": self.player_x += self.speed
 
         screen_limit = 800 
         if self.player_x > screen_limit:
@@ -188,29 +220,22 @@ class GameNode:
                 self.vel_y = self.jump_force
                 self.is_on_ground = False 
 
-    # -----------------------------------------------------------
-    #             PHYSICS LOOP
-    # -----------------------------------------------------------
     def update_physics(self, event):
-        if self.current_state != "RUNNING":
-            return
-
+        if self.current_state != "RUNNING": return
         self.update_player_physics()
         self.update_barrels()
-        self.update_coins() 
+        self.update_coins()
         self.publish_game_state()
 
     def update_player_physics(self):
         center_x = self.player_x + (self.player_w / 2)
         center_y = self.player_y + (self.player_h / 2)
         feet_y = self.player_y + self.player_h
-
         current_tile = self.get_tile_at(center_x, center_y)
         feet_tile = self.get_tile_at(center_x, feet_y)
         self.is_on_ladder = (current_tile == 2 or feet_tile == 2)
 
-        if self.is_on_ladder:
-            self.vel_y = 0 
+        if self.is_on_ladder: self.vel_y = 0 
         else:
             self.vel_y += self.gravity
             self.player_y += self.vel_y
@@ -237,7 +262,6 @@ class GameNode:
 
         barrels_data_str = ""
         active_barrels = []
-
         for b in self.barrels:
             b.speed_y += b.gravity
             b.x += b.speed_x
@@ -257,20 +281,12 @@ class GameNode:
             else:
                 b.is_falling = True
 
-            # --- COLLISION WITH MARIO ---
             if abs(self.player_x - b.x) < 25 and abs(self.player_y - b.y) < 25:
                 self.lives -= 1
-                rospy.logwarn(f"HIT! Lives: {self.lives}")
-                
-                # FIX: Removed position reset. Mario stays where he is.
-                # self.player_x = 100
-                # self.player_y = 400
-                
-                if self.lives <= 0:
-                    self.Final()
-                
-                # 'continue' skips adding this barrel to 'active_barrels', 
-                # so the barrel disappears, preventing infinite hits.
+                rospy.logwarn(f"¡GOLPE! Vidas: {self.lives}")
+                self.player_x = 100
+                self.player_y = 400
+                if self.lives <= 0: self.Final()
                 continue 
 
             if b.x > -20 and b.x < 820 and b.y < 650:
@@ -280,24 +296,18 @@ class GameNode:
         self.barrels = active_barrels
         self.barrel_publisher.publish(barrels_data_str)
 
-    # --- COIN LOGIC ---
     def update_coins(self):
         coins_data_str = ""
-        remaining_coins = []
-        
         for c in self.coins:
             if c.active:
                 dx = abs(self.player_x - c.x)
                 dy = abs(self.player_y - c.y)
-                
                 if dx < 30 and dy < 30:
                     self.score += 50 
                     c.active = False 
                     rospy.loginfo(f"Coin collected! Score: {self.score}")
                 else:
-                    remaining_coins.append(c)
                     coins_data_str += f"{c.x},{c.y};"
-        
         self.coins_publisher.publish(coins_data_str)
 
     # -----------------------------------------------------------
@@ -311,7 +321,6 @@ class GameNode:
         self.vel_y = 0
         self.lives = 3
         self.barrels = []
-        # Reactivate all coins on reset
         for c in self.coins: c.active = True
         rospy.loginfo("--- WELCOME ---")
         self.publish_game_state()
@@ -321,7 +330,6 @@ class GameNode:
         self.score = 0
         self.lives = 3
         self.barrels = []
-        # Reactivate all coins
         for c in self.coins: c.active = True
         self.last_barrel_time = rospy.get_time()
         rospy.loginfo("--- GAME START ---")
