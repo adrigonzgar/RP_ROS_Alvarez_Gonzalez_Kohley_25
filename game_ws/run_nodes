@@ -1,51 +1,30 @@
 #!/bin/bash
 
-# ============
-# run_nodes
-# ============
-# Ejecuta los nodos individualmente desde cualquier terminal abierta por el usuario
-
 WORKSPACE=~/RP_ROS_Alvarez_Gonzalez_Kohley_25/game_ws
 
-# Activar entorno
-cd $WORKSPACE
-source devel/setup.bash
+# Cargar entorno de ROS y del workspace
+source /opt/ros/noetic/setup.bash
+source $WORKSPACE/devel/setup.bash
 
-case "$1" in
+NODE=$1
 
-  control)
-    echo "🎮 Lanzando CONTROL_NODE..."
-    rosrun project_game control_node.py
-    ;;
-
-  game)
-    echo "🧠 Lanzando GAME_NODE..."
-    rosrun project_game game_node.py
-    ;;
-
-  pygame)
-    echo "🖥️ Lanzando PYGAME_NODE..."
-    rosrun project_game pygame_node.py
-    ;;
-
-  info)
-    echo "🧩 Lanzando INFO_USER_NODE..."
-    rosrun project_game info_user.py
-    ;;
-
-  result)
-    echo "📊 Lanzando RESULT_NODE..."
-    rosrun project_game result_node.py
-    ;;
-
-  *)
-    echo "❌ Uso incorrecto."
-    echo "Comandos posibles:"
-    echo "    ./run_nodes control"
-    echo "    ./run_nodes game"
-    echo "    ./run_nodes pygame"
-    echo "    ./run_nodes info"
-    echo "    ./run_nodes result"
-    exit 1
-    ;;
+case $NODE in
+    info)
+        python3 $WORKSPACE/src/project_game/scripts/info_user.py
+        ;;
+    control)
+        python3 $WORKSPACE/src/project_game/scripts/control_node.py
+        ;;
+    game)
+        python3 $WORKSPACE/src/project_game/scripts/game_node.py
+        ;;
+    pygame)
+        python3 $WORKSPACE/src/project_game/scripts/pygame_node.py
+        ;;
+    result)
+        python3 $WORKSPACE/src/project_game/scripts/result_node.py
+        ;;
+    *)
+        echo "Usage: ./run_nodes [info|control|game|pygame|result]"
+        ;;
 esac

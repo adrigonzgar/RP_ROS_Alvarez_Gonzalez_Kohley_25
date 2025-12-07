@@ -1,0 +1,34 @@
+#!/bin/bash
+
+WORKSPACE=~/RP_ROS_Alvarez_Gonzalez_Kohley_25/game_ws
+
+echo "Compilando workspace ROS..."
+cd $WORKSPACE
+catkin_make
+source devel/setup.bash
+
+echo "Lanzando ROSCORE..."
+gnome-terminal -- bash -c "roscore; bash" 2>/dev/null || xterm -hold -e "roscore" & 
+sleep 1
+
+echo "Lanzando INFO_USER_NODE..."
+gnome-terminal -- bash -c "$WORKSPACE/run_nodes info; bash" 2>/dev/null || xterm -hold -e "$WORKSPACE/run_nodes info" &
+sleep 1
+
+echo "Lanzando CONTROL_NODE..."
+gnome-terminal -- bash -c "$WORKSPACE/run_nodes control; bash" 2>/dev/null || xterm -hold -e "$WORKSPACE/run_nodes control" &
+sleep 1
+
+echo "Lanzando GAME_NODE..."
+gnome-terminal -- bash -c "$WORKSPACE/run_nodes game; bash" 2>/dev/null || xterm -hold -e "$WORKSPACE/run_nodes game" &
+sleep 1
+
+echo "Lanzando PYGAME_NODE..."
+gnome-terminal -- bash -c "$WORKSPACE/run_nodes pygame; bash" 2>/dev/null || xterm -hold -e "$WORKSPACE/run_nodes pygame" &
+sleep 1
+
+echo "Lanzando RESULT_NODE..."
+gnome-terminal -- bash -c "$WORKSPACE/run_nodes result; bash" 2>/dev/null || xterm -hold -e "$WORKSPACE/run_nodes result" &
+sleep 1
+
+echo "✔ Todos los nodos han sido lanzados."

@@ -46,6 +46,10 @@ class InfoUserNode:
             rospy.loginfo(f"Sending data for: {username_input}...")
             self.publisher.publish(msg)
             
+
+            # Notify system that user data is ready
+            rospy.set_param("/user_ready", True)
+
             rospy.loginfo("Data sent successfully to GAME_NODE.")
             
             # If you needed continuous operation, you would use rospy.spin() -> noted
