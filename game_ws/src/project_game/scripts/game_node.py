@@ -9,7 +9,7 @@
 
 import rospy
 import random 
-import time
+import copy 
 from project_game.msg import user_msg
 from project_game.msg import game_state
 from std_msgs.msg import String, Int64
@@ -18,13 +18,14 @@ from std_msgs.msg import String, Int64
 from project_game.srv import GetUserScore, GetUserScoreResponse
 from project_game.srv import SetGameDifficulty, SetGameDifficultyResponse
 
+# --- CLASSES ---
 class Barrel:
-    def __init__(self, x, y):
+    def __init__(self, x, y, speed_range, gravity_val):
         self.x = x
         self.y = y
-        self.speed_x = random.choice([-3, 3])
+        self.speed_x = random.choice(speed_range)
         self.speed_y = 0
-        self.gravity = 0.5
+        self.gravity = gravity_val
         self.is_falling = True 
 
 class Coin:
@@ -35,7 +36,6 @@ class Coin:
         self.height = 15
         self.active = True
 
-# --- CLASE HEART ---
 class Heart:
     def __init__(self, x, y):
         self.x = x
@@ -43,6 +43,24 @@ class Heart:
         self.width = 20
         self.height = 20
         self.creation_time = rospy.get_time()
+
+class MovingPlatform:
+    def __init__(self, x, y, width, height, range_x):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.start_x = x
+        self.range_x = range_x
+        self.speed = 2
+        self.direction = 1 
+    
+    def update(self):
+        self.x += self.speed * self.direction
+        if self.x > self.start_x + self.range_x:
+            self.direction = -1
+        elif self.x < self.start_x - self.range_x:
+            self.direction = 1
 
 class GameNode:
     def __init__(self):
@@ -53,7 +71,6 @@ class GameNode:
         self.player_username = "Unknown"
         self.player_age = 0
 
-        # Mario Start Position
         self.player_x = 50
         self.player_y = 520 
         
@@ -65,19 +82,25 @@ class GameNode:
         self.vel_y = 0          
         self.gravity = 2.0      
         self.jump_force = -15   
-        self.speed = 8          
+        self.speed = 8  
         
         self.player_w = 30
         self.player_h = 30
         self.is_on_ground = False
         self.is_on_ladder = False
 
-        # --- BARRELS ---
+        # --- DIFFICULTY VARIABLES ---
+        self.current_difficulty_level = "medium"
+        self.barrel_spawn_rate = 2.0 
+        self.barrel_gravity_val = 0.5
+        self.barrel_speed_range = [-3, 3]
+        self.start_lives = 3 
+
+        # --- GAME OBJECTS ---
         self.barrels = []
         self.last_barrel_time = 0
-        self.barrel_spawn_rate = 2.0 
-
-        # --- COINS ---
+        self.moving_platforms = [] 
+        
         self.coins = [
             Coin(100, 520), Coin(700, 520),
             Coin(150, 420), Coin(650, 420),
@@ -86,14 +109,14 @@ class GameNode:
             Coin(380, 120), Coin(420, 120)
         ]
 
-        # --- HEARTS ---
         self.hearts = []
         self.last_heart_spawn_time = rospy.get_time()
 
         # --- MAP CONFIGURATION ---
         self.block_width = 40
         self.block_height = 25
-        self.level_map = [
+        
+        self.original_level_map = [
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -108,26 +131,28 @@ class GameNode:
             [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
             [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
             [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # Row 14
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0], # Row 18
             [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
             [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
             [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] 
         ]
+        # Initial Setup 
+        self.setup_level(self.current_difficulty_level)
 
         # --- PUBLISHERS ---
         self.result_publisher = rospy.Publisher('result_information', Int64, queue_size=10)
         self.state_publisher = rospy.Publisher('game_state', game_state, queue_size=10)
         
-        # Topics de objetos (Usamos String estándar, sin tocar .msg)
         self.barrel_publisher = rospy.Publisher('barrels_data', String, queue_size=10)
         self.coins_publisher = rospy.Publisher('coins_data', String, queue_size=10)
-        self.hearts_publisher = rospy.Publisher('hearts_data', String, queue_size=10) # <--- NUEVO TOPIC
+        self.hearts_publisher = rospy.Publisher('hearts_data', String, queue_size=10) 
+        self.platforms_publisher = rospy.Publisher('moving_platforms_data', String, queue_size=10)
 
         # --- SERVICES ---
         rospy.Service('user_score', GetUserScore, self.handle_get_score)
@@ -143,31 +168,69 @@ class GameNode:
         self.publish_game_state()
         rospy.spin()
 
-    # --- SERVICE CALLBACKS ---
     def handle_get_score(self, req):
         if req.username == self.player_username:
             return GetUserScoreResponse(self.score)
         else:
             return GetUserScoreResponse(0)
 
+    # --- SETUP LEVEL (MAP & PLATFORMS) ---
+    def setup_level(self, diff):
+        # 1. Reset Map to Original State (clean slate)
+        self.level_map = copy.deepcopy(self.original_level_map)
+        self.moving_platforms = []
+        
+        # 2. Configure based on Difficulty
+        if diff == "easy":
+            self.barrel_spawn_rate = 3.5      
+            self.barrel_gravity_val = 0.3     
+            self.barrel_speed_range = [-2, 2] 
+            
+        elif diff == "medium":
+            self.barrel_spawn_rate = 2.0      
+            self.barrel_gravity_val = 0.5     
+            self.barrel_speed_range = [-3, 3] 
+
+            # Row 14 Holes
+            for c in range(2, 8): self.level_map[14][c] = 0
+            for c in range(12, 18): self.level_map[14][c] = 0
+            # Platforms
+            self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))  
+            self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40)) 
+            
+        elif diff == "hard":
+            self.barrel_spawn_rate = 0.8      
+            self.barrel_gravity_val = 0.9     
+            self.barrel_speed_range = [-5, 5] 
+            
+            # Row 14 Holes
+            for c in range(2, 8): self.level_map[14][c] = 0
+            for c in range(12, 18): self.level_map[14][c] = 0
+            # Row 18 Holes
+            for c in range(1, 9): self.level_map[18][c] = 0
+            for c in range(11, 19): self.level_map[18][c] = 0
+            
+            # Platforms
+            self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))
+            self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40))
+            self.moving_platforms.append(MovingPlatform(40, 18 * 25, 320, 25, 30))
+            self.moving_platforms.append(MovingPlatform(440, 18 * 25, 320, 25, 30))
+
+    # --- HANDLE DIFFICULTY SERVICE ---
     def handle_set_difficulty(self, req):
+        rospy.loginfo(f"Request to change difficulty to: {req.change_difficulty}")
+        
         if self.current_state != "WELCOME":
-            return SetGameDifficultyResponse(False, "Error: You can only change difficulty in the Start Screen!")
+            return SetGameDifficultyResponse(False, "Error: Can only change difficulty in Start Screen")
 
         diff = req.change_difficulty.lower()
-        if diff == "easy":
-            self.barrel_spawn_rate = 4.0 
-            return SetGameDifficultyResponse(True, "Difficulty set to EASY")
-        elif diff == "medium":
-            self.barrel_spawn_rate = 2.0 
-            return SetGameDifficultyResponse(True, "Difficulty set to MEDIUM")
-        elif diff == "hard":
-            self.barrel_spawn_rate = 1.0 
-            return SetGameDifficultyResponse(True, "Difficulty set to HARD")
+        if diff in ["easy", "medium", "hard"]:
+            self.current_difficulty_level = diff
+            self.setup_level(diff)
+            return SetGameDifficultyResponse(True, f"Mode set to: {diff.upper()}")
         else:
-            return SetGameDifficultyResponse(False, "Invalid difficulty. Use: easy, medium, hard")
+            return SetGameDifficultyResponse(False, "Invalid input")
 
-    # --- HELPER: GET TILE TYPE ---
     def get_tile_at(self, x, y):
         col = int(x / self.block_width)
         row = int(y / self.block_height)
@@ -175,7 +238,6 @@ class GameNode:
         col = max(0, min(col, len(self.level_map[0]) - 1))
         return self.level_map[row][col]
 
-    # --- CALLBACKS ---
     def callback_user_info(self, msg):
         self.player_name = msg.name
         self.player_username = msg.username
@@ -185,21 +247,21 @@ class GameNode:
     def callback_keyboard(self, msg):
         command = msg.data
         if self.current_state == "WELCOME":
-            self.Game()
+            if command == "START": 
+                self.Game()
+            else:
+                self.Game() 
             return
         if self.current_state == "GAME_OVER":
             self.Welcome()
             return
         if self.current_state == "RUNNING":
             self.process_command(command)
-            
-            # --- WIN CONDITION ---
             dist_to_crown = abs(self.player_x - 380) + abs(self.player_y - 50)
             if dist_to_crown < 50:
-                self.score += 1000
+                self.score += 1000 * self.lives 
                 self.Final()
 
-    # --- GAME LOGIC ---
     def process_command(self, command):
         if command == "LEFT": self.player_x -= self.speed
         elif command == "RIGHT": self.player_x += self.speed
@@ -221,8 +283,16 @@ class GameNode:
         self.update_player_physics()
         self.update_barrels()
         self.update_coins()
-        self.update_hearts() # <--- Llamada a función de corazones
+        self.update_hearts() 
+        self.update_platforms() 
         self.publish_game_state()
+
+    def update_platforms(self):
+        platforms_str = ""
+        for p in self.moving_platforms:
+            p.update()
+            platforms_str += f"{int(p.x)},{int(p.y)},{p.width},{p.height};"
+        self.platforms_publisher.publish(platforms_str)
 
     def update_player_physics(self):
         center_x = self.player_x + (self.player_w / 2)
@@ -238,7 +308,19 @@ class GameNode:
             self.player_y += self.vel_y
 
         self.is_on_ground = False
-        if not self.is_on_ladder and self.vel_y >= 0:
+        
+        # 1. COLLISION WITH MOVING PLATFORMS
+        if self.vel_y >= 0: 
+            for p in self.moving_platforms:
+                if center_x > p.x and center_x < p.x + p.width:
+                    if feet_y >= p.y and feet_y <= p.y + 20: 
+                        self.player_y = p.y - self.player_h
+                        self.vel_y = 0
+                        self.is_on_ground = True
+                        self.player_x += p.speed * p.direction 
+
+        # 2. COLLISION WITH STATIC MAP
+        if not self.is_on_ground and not self.is_on_ladder and self.vel_y >= 0:
             tile_below = self.get_tile_at(center_x, self.player_y + self.player_h + 1)
             if tile_below == 1:
                 row = int((self.player_y + self.player_h + 1) / self.block_height)
@@ -254,36 +336,48 @@ class GameNode:
     def update_barrels(self):
         now = rospy.get_time()
         if now - self.last_barrel_time > self.barrel_spawn_rate:
-            new_barrel = Barrel(400, 150)
+            new_barrel = Barrel(400, 150, self.barrel_speed_range, self.barrel_gravity_val)
             self.barrels.append(new_barrel)
             self.last_barrel_time = now
 
         barrels_data_str = ""
         active_barrels = []
         for b in self.barrels:
-            b.speed_y += b.gravity
-            b.x += b.speed_x
+            b.speed_y += b.gravity 
+            b.x += b.speed_x       
             b.y += b.speed_y
             
             center_bx = b.x + 10
             feet_by = b.y + 20
             tile_below = self.get_tile_at(center_bx, feet_by)
             
+            landed = False
+            
             if tile_below == 1: 
                 row = int(feet_by / self.block_height)
                 b.y = (row * self.block_height) - 20
                 b.speed_y = 0
+                landed = True
+
+            if not landed:
+                for p in self.moving_platforms:
+                     if center_bx > p.x and center_bx < p.x + p.width:
+                        if feet_by >= p.y and feet_by <= p.y + 20:
+                            b.y = p.y - 20
+                            b.speed_y = 0
+                            landed = True
+                            b.x += p.speed * p.direction 
+
+            if landed:
                 if b.is_falling:
                     b.is_falling = False 
-                    b.speed_x = random.choice([-3, 3])
+                    b.speed_x = random.choice(self.barrel_speed_range)
             else:
                 b.is_falling = True
 
             if abs(self.player_x - b.x) < 25 and abs(self.player_y - b.y) < 25:
                 self.lives -= 1
                 rospy.logwarn(f"HIT! Lives: {self.lives}")
-                self.player_x = 50 
-                self.player_y = 520
                 if self.lives <= 0: self.Final()
                 continue 
 
@@ -303,62 +397,51 @@ class GameNode:
                 if dx < 30 and dy < 30:
                     self.score += 50 
                     c.active = False 
-                    rospy.loginfo(f"Coin collected! Score: {self.score}")
                 else:
                     coins_data_str += f"{c.x},{c.y};"
         self.coins_publisher.publish(coins_data_str)
     
-    # --- LOGICA CORAZONES (Ahora sincronizada) ---
     def update_hearts(self):
         now = rospy.get_time()
-        
-        # 1. Spawn logic (cada 8-15 segundos)
         if now - self.last_heart_spawn_time > random.randint(8, 15):
             accessible_y = [520, 420, 320, 220, 120] 
             hy = random.choice(accessible_y)
             hx = random.randint(50, 750)
-            
             self.hearts.append(Heart(hx, hy))
             self.last_heart_spawn_time = now
-            rospy.loginfo(f"Heart Spawned at {hx},{hy}")
 
         hearts_data_str = ""
         for h in self.hearts[:]:
-            # Borrar si caduca
             if now - h.creation_time > 10.0:
                 self.hearts.remove(h)
                 continue
-            
-            # 2. Colisión (La lógica la lleva este nodo)
             dx = abs(self.player_x - h.x)
             dy = abs(self.player_y - h.y)
-            
             if dx < 30 and dy < 30:
                 if self.lives < 3:
                     self.lives += 1
-                    rospy.loginfo(f"VIDA RECUPERADA! Total: {self.lives}")
                     self.hearts.remove(h)
                 else:
-                    # Si vidas a tope, puntos
                     self.score += 50
                     self.hearts.remove(h)
             else:
-                # Si no colisiona, lo añadimos al string para el visualizador
                 hearts_data_str += f"{h.x},{h.y};"
-        
-        # Publicamos la posición REAL de los corazones
         self.hearts_publisher.publish(hearts_data_str)
 
-    # --- PHASES ---
     def Welcome(self):
         self.current_state = "WELCOME"
         self.player_x = 50
         self.player_y = 520
         self.score = 0
         self.vel_y = 0
-        self.lives = 3
+        self.lives = self.start_lives 
         self.barrels = []
-        self.hearts = [] # Reset hearts
+        self.hearts = [] 
+        # --- FIX: DO NOT CLEAR PLATFORMS HERE ---
+        # If we clear them, the update loop sends empty data to pygame, 
+        # and pygame clears its list.
+        # Platforms will be correctly reset/setup in self.Game() or handle_set_difficulty()
+        
         for c in self.coins: c.active = True
         rospy.loginfo("--- WELCOME ---")
         self.publish_game_state()
@@ -366,17 +449,20 @@ class GameNode:
     def Game(self):
         self.current_state = "RUNNING"
         self.score = 0
-        self.lives = 3
+        self.lives = self.start_lives
         self.barrels = []
-        self.hearts = [] # Reset hearts
+        self.hearts = [] 
+        
+        # --- CRITICAL: REGENERATE MAP AND PLATFORMS ---
+        self.setup_level(self.current_difficulty_level)
+        
         for c in self.coins: c.active = True
         self.last_barrel_time = rospy.get_time()
         self.last_heart_spawn_time = rospy.get_time()
-        rospy.loginfo("--- GAME START ---")
+        rospy.loginfo(f"--- GAME START ---")
 
     def Final(self):
         self.current_state = "GAME_OVER"
-        rospy.loginfo(f"--- GAME OVER: Score {self.score} ---")
         msg = Int64()
         msg.data = self.score
         self.result_publisher.publish(msg)
