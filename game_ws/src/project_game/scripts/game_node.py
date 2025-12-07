@@ -9,6 +9,7 @@
 
 import rospy
 import random 
+import time
 from project_game.msg import user_msg
 from project_game.msg import game_state
 from std_msgs.msg import String, Int64
@@ -34,6 +35,15 @@ class Coin:
         self.height = 15
         self.active = True
 
+# --- CLASE HEART ---
+class Heart:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 20
+        self.height = 20
+        self.creation_time = rospy.get_time()
+
 class GameNode:
     def __init__(self):
         rospy.init_node('game_node', anonymous=True)
@@ -43,7 +53,7 @@ class GameNode:
         self.player_username = "Unknown"
         self.player_age = 0
 
-        # Mario Start Position (Standing on floor Y=550)
+        # Mario Start Position
         self.player_x = 50
         self.player_y = 520 
         
@@ -62,56 +72,62 @@ class GameNode:
         self.is_on_ground = False
         self.is_on_ladder = False
 
-        # --- BARRELS & DIFFICULTY ---
+        # --- BARRELS ---
         self.barrels = []
         self.last_barrel_time = 0
         self.barrel_spawn_rate = 2.0 
 
-        # --- COINS CONFIGURATION (RAISED) ---
-        # Calculation: Platform Y - 30 (to float above ground)
+        # --- COINS ---
         self.coins = [
-            Coin(100, 520), Coin(700, 520), # Floor (Y=550 -> 520)
-            Coin(150, 420), Coin(650, 420), # Low Sides (Y=450 -> 420)
-            Coin(250, 320), Coin(550, 320), # Mid Sides (Y=350 -> 320)
-            Coin(400, 220),                 # Center Platform (Y=250 -> 220)
-            Coin(380, 120), Coin(420, 120)  # Near DK (Y=150 -> 120)
+            Coin(100, 520), Coin(700, 520),
+            Coin(150, 420), Coin(650, 420),
+            Coin(250, 320), Coin(550, 320),
+            Coin(400, 220),
+            Coin(380, 120), Coin(420, 120)
         ]
 
-        # --- MAP CONFIGURATION (PYRAMID STYLE) ---
+        # --- HEARTS ---
+        self.hearts = []
+        self.last_heart_spawn_time = rospy.get_time()
+
+        # --- MAP CONFIGURATION ---
         self.block_width = 40
         self.block_height = 25
         self.level_map = [
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 0
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 1
-            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0], # 2 (Crown Area)
-            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0], # 3 (Small Top Platform Y=75)
-            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0], # 4
-            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0], # 5
-            [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0], # 6 (DK Platform Y=150)
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 7
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 8
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 9
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], # 10 (Long Mid Y=250)
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 11
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 12
-            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0], # 13
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # 14 (Two Sides Y=350)
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 15
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 16
-            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0], # 17
-            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0], # 18 (Lower Sides Y=450)
-            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], # 19
-            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], # 20
-            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0], # 21
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], # 22 (Floor Y=550)
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]  # 23
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,2,2,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
+            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
+            [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0],
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
+            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0],
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] 
         ]
 
         # --- PUBLISHERS ---
         self.result_publisher = rospy.Publisher('result_information', Int64, queue_size=10)
         self.state_publisher = rospy.Publisher('game_state', game_state, queue_size=10)
+        
+        # Topics de objetos (Usamos String estándar, sin tocar .msg)
         self.barrel_publisher = rospy.Publisher('barrels_data', String, queue_size=10)
         self.coins_publisher = rospy.Publisher('coins_data', String, queue_size=10)
+        self.hearts_publisher = rospy.Publisher('hearts_data', String, queue_size=10) # <--- NUEVO TOPIC
 
         # --- SERVICES ---
         rospy.Service('user_score', GetUserScore, self.handle_get_score)
@@ -127,9 +143,7 @@ class GameNode:
         self.publish_game_state()
         rospy.spin()
 
-    # -----------------------------------------------------------
-    #                   SERVICE CALLBACKS
-    # -----------------------------------------------------------
+    # --- SERVICE CALLBACKS ---
     def handle_get_score(self, req):
         if req.username == self.player_username:
             return GetUserScoreResponse(self.score)
@@ -153,9 +167,7 @@ class GameNode:
         else:
             return SetGameDifficultyResponse(False, "Invalid difficulty. Use: easy, medium, hard")
 
-    # -----------------------------------------------------------
-    #                   HELPER: GET TILE TYPE
-    # -----------------------------------------------------------
+    # --- HELPER: GET TILE TYPE ---
     def get_tile_at(self, x, y):
         col = int(x / self.block_width)
         row = int(y / self.block_height)
@@ -163,9 +175,7 @@ class GameNode:
         col = max(0, min(col, len(self.level_map[0]) - 1))
         return self.level_map[row][col]
 
-    # -----------------------------------------------------------
-    #                   CALLBACKS
-    # -----------------------------------------------------------
+    # --- CALLBACKS ---
     def callback_user_info(self, msg):
         self.player_name = msg.name
         self.player_username = msg.username
@@ -183,28 +193,21 @@ class GameNode:
         if self.current_state == "RUNNING":
             self.process_command(command)
             
-            # --- WIN CONDITION: REACH THE CROWN ---
+            # --- WIN CONDITION ---
             dist_to_crown = abs(self.player_x - 380) + abs(self.player_y - 50)
             if dist_to_crown < 50:
                 self.score += 1000
                 self.Final()
 
-    # -----------------------------------------------------------
-    #                   GAME LOGIC
-    # -----------------------------------------------------------
+    # --- GAME LOGIC ---
     def process_command(self, command):
-        # 1. Update Position
         if command == "LEFT": self.player_x -= self.speed
         elif command == "RIGHT": self.player_x += self.speed
 
-        # 2. Screen Wrapping (Teleport logic)
         screen_limit = 800 
-        if self.player_x > screen_limit:
-            self.player_x = 0
-        elif self.player_x < 0:
-            self.player_x = screen_limit - self.player_w
+        if self.player_x > screen_limit: self.player_x = 0
+        elif self.player_x < 0: self.player_x = screen_limit - self.player_w
 
-        # 3. Vertical / Jump Logic
         if self.is_on_ladder:
             if command == "UP": self.player_y -= self.speed
             elif command == "DOWN": self.player_y += self.speed
@@ -218,6 +221,7 @@ class GameNode:
         self.update_player_physics()
         self.update_barrels()
         self.update_coins()
+        self.update_hearts() # <--- Llamada a función de corazones
         self.publish_game_state()
 
     def update_player_physics(self):
@@ -242,7 +246,6 @@ class GameNode:
                 self.vel_y = 0
                 self.is_on_ground = True
             
-            # Floor safety
             if self.player_y >= 520:
                 self.player_y = 520
                 self.vel_y = 0
@@ -251,7 +254,6 @@ class GameNode:
     def update_barrels(self):
         now = rospy.get_time()
         if now - self.last_barrel_time > self.barrel_spawn_rate:
-            # Spawn slightly below the crown
             new_barrel = Barrel(400, 150)
             self.barrels.append(new_barrel)
             self.last_barrel_time = now
@@ -305,10 +307,49 @@ class GameNode:
                 else:
                     coins_data_str += f"{c.x},{c.y};"
         self.coins_publisher.publish(coins_data_str)
+    
+    # --- LOGICA CORAZONES (Ahora sincronizada) ---
+    def update_hearts(self):
+        now = rospy.get_time()
+        
+        # 1. Spawn logic (cada 8-15 segundos)
+        if now - self.last_heart_spawn_time > random.randint(8, 15):
+            accessible_y = [520, 420, 320, 220, 120] 
+            hy = random.choice(accessible_y)
+            hx = random.randint(50, 750)
+            
+            self.hearts.append(Heart(hx, hy))
+            self.last_heart_spawn_time = now
+            rospy.loginfo(f"Heart Spawned at {hx},{hy}")
 
-    # -----------------------------------------------------------
-    #                   PHASES
-    # -----------------------------------------------------------
+        hearts_data_str = ""
+        for h in self.hearts[:]:
+            # Borrar si caduca
+            if now - h.creation_time > 10.0:
+                self.hearts.remove(h)
+                continue
+            
+            # 2. Colisión (La lógica la lleva este nodo)
+            dx = abs(self.player_x - h.x)
+            dy = abs(self.player_y - h.y)
+            
+            if dx < 30 and dy < 30:
+                if self.lives < 3:
+                    self.lives += 1
+                    rospy.loginfo(f"VIDA RECUPERADA! Total: {self.lives}")
+                    self.hearts.remove(h)
+                else:
+                    # Si vidas a tope, puntos
+                    self.score += 50
+                    self.hearts.remove(h)
+            else:
+                # Si no colisiona, lo añadimos al string para el visualizador
+                hearts_data_str += f"{h.x},{h.y};"
+        
+        # Publicamos la posición REAL de los corazones
+        self.hearts_publisher.publish(hearts_data_str)
+
+    # --- PHASES ---
     def Welcome(self):
         self.current_state = "WELCOME"
         self.player_x = 50
@@ -317,6 +358,7 @@ class GameNode:
         self.vel_y = 0
         self.lives = 3
         self.barrels = []
+        self.hearts = [] # Reset hearts
         for c in self.coins: c.active = True
         rospy.loginfo("--- WELCOME ---")
         self.publish_game_state()
@@ -326,8 +368,10 @@ class GameNode:
         self.score = 0
         self.lives = 3
         self.barrels = []
+        self.hearts = [] # Reset hearts
         for c in self.coins: c.active = True
         self.last_barrel_time = rospy.get_time()
+        self.last_heart_spawn_time = rospy.get_time()
         rospy.loginfo("--- GAME START ---")
 
     def Final(self):

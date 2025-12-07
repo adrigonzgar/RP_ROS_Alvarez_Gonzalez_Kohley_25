@@ -32,8 +32,11 @@ class PygameNode:
         self.player_y = 300
         self.score = 0
         self.lives = 3
+        
+        # Datos recibidos de topics
         self.barrels_data = []
         self.coins_data = [] 
+        self.hearts_data = [] # <--- Lista para recibir corazones del topic
         
         # --- COLORES ---
         self.BLACK = (0, 0, 0)
@@ -42,6 +45,7 @@ class PygameNode:
         self.YELLOW = (255, 255, 0) 
         self.BLUE_PLATFORM = (0, 0, 255)
         self.YELLOW_LADDER = (255, 255, 0)
+        self.PINK = (255, 105, 180) # Color Corazon
         
         # Sprites Colors
         self.M_SHIRT = (255, 0, 0)      
@@ -93,8 +97,11 @@ class PygameNode:
 
         # Subscribers
         rospy.Subscriber("game_state", game_state, self.callback_game_state)
+        
+        # Suscripción a topics de objetos (Strings estándar)
         rospy.Subscriber("barrels_data", String, self.callback_barrels)
         rospy.Subscriber("coins_data", String, self.callback_coins)
+        rospy.Subscriber("hearts_data", String, self.callback_hearts) # <--- Suscripción al nuevo topic
         
         self.run()
 
@@ -143,6 +150,20 @@ class PygameNode:
                     except: pass
         self.coins_data = new_coins
 
+    # --- CALLBACK NUEVO PARA CORAZONES ---
+    def callback_hearts(self, msg):
+        raw_data = msg.data
+        new_hearts = []
+        if raw_data:
+            items = raw_data.split(';')
+            for item in items:
+                if ',' in item:
+                    coords = item.split(',')
+                    try:
+                        new_hearts.append((int(coords[0]), int(coords[1])))
+                    except: pass
+        self.hearts_data = new_hearts
+
     # ---------------------------------------------------
     #                DRAWING
     # ---------------------------------------------------
@@ -177,7 +198,7 @@ class PygameNode:
 
     def draw_donkey_kong(self):
         dk_x = 370  
-        dk_y = 90    # ADJUSTED: Moves DK up to sit on the platform
+        dk_y = 90    
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x, dk_y + 20, 60, 40))
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 10, dk_y, 40, 30))
         pygame.draw.rect(self.screen, self.DK_PEACH, (dk_x + 15, dk_y + 5, 30, 20))
@@ -204,6 +225,11 @@ class PygameNode:
         for (cx, cy) in self.coins_data:
             pygame.draw.circle(self.screen, self.COIN_COLOR, (cx + 15, cy + 15), 8)
             pygame.draw.circle(self.screen, self.YELLOW, (cx + 15, cy + 15), 4)
+
+    # --- DRAW HEARTS (Ahora usa datos del topic) ---
+    def draw_hearts(self):
+        for (hx, hy) in self.hearts_data:
+            pygame.draw.rect(self.screen, self.PINK, (hx, hy, 20, 20))
 
     def draw_ui(self):
         font = pygame.font.SysFont("Arial", 24)
@@ -240,6 +266,7 @@ class PygameNode:
                 self.draw_donkey_kong()
                 self.draw_coins() 
                 self.draw_barrels()
+                self.draw_hearts() # Dibujar corazones recibidos
                 self.draw_player_original() 
                 self.draw_ui()
 
