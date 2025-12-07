@@ -12,6 +12,8 @@ import pygame
 import os 
 from project_game.msg import game_state
 from std_msgs.msg import String
+from project_game.srv import SetGameDifficulty
+
 
 class PygameNode:
     def __init__(self):
@@ -32,11 +34,14 @@ class PygameNode:
         self.player_y = 300
         self.score = 0
         self.lives = 3
-        
+
+        # Difficulty selection
+        self.selected_difficulty = None
+
         # Datos recibidos de topics
         self.barrels_data = []
         self.coins_data = [] 
-        self.hearts_data = [] # <--- Lista para recibir corazones del topic
+        self.hearts_data = [] 
         
         # --- COLORES ---
         self.BLACK = (0, 0, 0)
@@ -45,7 +50,7 @@ class PygameNode:
         self.YELLOW = (255, 255, 0) 
         self.BLUE_PLATFORM = (0, 0, 255)
         self.YELLOW_LADDER = (255, 255, 0)
-        self.PINK = (255, 105, 180) # Color Corazon
+        self.PINK = (255, 105, 180)
         
         # Sprites Colors
         self.M_SHIRT = (255, 0, 0)      
@@ -98,11 +103,13 @@ class PygameNode:
         # Subscribers
         rospy.Subscriber("game_state", game_state, self.callback_game_state)
         
-        # Suscripción a topics de objetos (Strings estándar)
         rospy.Subscriber("barrels_data", String, self.callback_barrels)
         rospy.Subscriber("coins_data", String, self.callback_coins)
-        rospy.Subscriber("hearts_data", String, self.callback_hearts) # <--- Suscripción al nuevo topic
-        
+        rospy.Subscriber("hearts_data", String, self.callback_hearts)
+
+        # Publisher to start game
+        self.start_pub = rospy.Publisher("keyboard_control", String, queue_size=1)
+
         self.run()
 
     def load_resources(self):
@@ -113,7 +120,8 @@ class PygameNode:
             try:
                 img = pygame.image.load(image_path)
                 return pygame.transform.scale(img, (self.screen_width, self.screen_height))
-            except: return None
+            except:
+                return None
         return None
 
     def callback_game_state(self, msg):
@@ -128,44 +136,43 @@ class PygameNode:
         raw_data = msg.data
         new_barrels = []
         if raw_data:
-            items = raw_data.split(';')
-            for item in items:
+            for item in raw_data.split(';'):
                 if ',' in item:
-                    coords = item.split(',')
                     try:
-                        new_barrels.append((int(coords[0]), int(coords[1])))
-                    except: pass
+                        x, y = map(int, item.split(','))
+                        new_barrels.append((x, y))
+                    except:
+                        pass
         self.barrels_data = new_barrels
 
     def callback_coins(self, msg):
         raw_data = msg.data
         new_coins = []
         if raw_data:
-            items = raw_data.split(';')
-            for item in items:
+            for item in raw_data.split(';'):
                 if ',' in item:
-                    coords = item.split(',')
                     try:
-                        new_coins.append((int(coords[0]), int(coords[1])))
-                    except: pass
+                        x, y = map(int, item.split(','))
+                        new_coins.append((x, y))
+                    except:
+                        pass
         self.coins_data = new_coins
 
-    # --- CALLBACK NUEVO PARA CORAZONES ---
     def callback_hearts(self, msg):
         raw_data = msg.data
         new_hearts = []
         if raw_data:
-            items = raw_data.split(';')
-            for item in items:
+            for item in raw_data.split(';'):
                 if ',' in item:
-                    coords = item.split(',')
                     try:
-                        new_hearts.append((int(coords[0]), int(coords[1])))
-                    except: pass
+                        x, y = map(int, item.split(','))
+                        new_hearts.append((x, y))
+                    except:
+                        pass
         self.hearts_data = new_hearts
 
     # ---------------------------------------------------
-    #                DRAWING
+    #                DRAWING FUNCTIONS
     # ---------------------------------------------------
 
     def draw_map(self):
@@ -173,9 +180,9 @@ class PygameNode:
             for col_index, tile in enumerate(row):
                 x = col_index * self.block_width
                 y = row_index * self.block_height
-                if tile == 1: 
+                if tile == 1:
                     pygame.draw.rect(self.screen, self.BLUE_PLATFORM, (x, y, self.block_width, self.block_height))
-                elif tile == 2: 
+                elif tile == 2:
                     pygame.draw.rect(self.screen, self.YELLOW_LADDER, (x + 10, y, 5, self.block_height))
                     pygame.draw.rect(self.screen, self.YELLOW_LADDER, (x + 25, y, 5, self.block_height))
                     for i in range(0, self.block_height, 5):
@@ -200,33 +207,20 @@ class PygameNode:
         dk_x = 370  
         dk_y = 90    
         pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x, dk_y + 20, 60, 40))
-        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 10, dk_y, 40, 30))
-        pygame.draw.rect(self.screen, self.DK_PEACH, (dk_x + 15, dk_y + 5, 30, 20))
-        pygame.draw.rect(self.screen, self.DK_EYES, (dk_x + 20, dk_y + 10, 4, 4))
-        pygame.draw.rect(self.screen, self.DK_EYES, (dk_x + 30, dk_y + 10, 4, 4))
-        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x - 10, dk_y + 25, 15, 25))
-        pygame.draw.rect(self.screen, self.DK_BROWN, (dk_x + 55, dk_y + 25, 15, 25))
 
     def draw_crown(self):
         cx = 390
         cy = 45
         pygame.draw.rect(self.screen, self.CROWN_COLOR, (cx, cy, 30, 20))
-        pygame.draw.polygon(self.screen, self.CROWN_COLOR, [(cx, cy), (cx-5, cy-10), (cx+10, cy)])
-        pygame.draw.polygon(self.screen, self.CROWN_COLOR, [(cx+10, cy), (cx+15, cy-15), (cx+20, cy)])
-        pygame.draw.polygon(self.screen, self.CROWN_COLOR, [(cx+20, cy), (cx+35, cy-10), (cx+30, cy)])
-        pygame.draw.circle(self.screen, self.RED, (cx+15, cy+10), 5)
 
     def draw_barrels(self):
         for (bx, by) in self.barrels_data:
             pygame.draw.circle(self.screen, self.BARREL_COLOR, (bx + 10, by + 10), 10)
-            pygame.draw.circle(self.screen, (100, 50, 20), (bx + 10, by + 10), 6)
 
     def draw_coins(self):
         for (cx, cy) in self.coins_data:
             pygame.draw.circle(self.screen, self.COIN_COLOR, (cx + 15, cy + 15), 8)
-            pygame.draw.circle(self.screen, self.YELLOW, (cx + 15, cy + 15), 4)
 
-    # --- DRAW HEARTS (Ahora usa datos del topic) ---
     def draw_hearts(self):
         for (hx, hy) in self.hearts_data:
             pygame.draw.rect(self.screen, self.PINK, (hx, hy, 20, 20))
@@ -238,51 +232,115 @@ class PygameNode:
         self.screen.blit(score_text, (10, 10))
         self.screen.blit(lives_text, (700, 10))
 
+    # ---------------------------------------------------
+    #                DIFFICULTY SERVICE
+    # ---------------------------------------------------
+
+    def set_difficulty(self, level):
+        try:
+            rospy.wait_for_service('difficulty', timeout=2)
+            set_diff = rospy.ServiceProxy('difficulty', SetGameDifficulty)
+            resp = set_diff(level)
+            rospy.loginfo(resp.message)
+        except Exception as e:
+            rospy.logerr(f"ERROR setting difficulty: {e}")
+
+
+    # ---------------------------------------------------
+    #                MAIN LOOP
+    # ---------------------------------------------------
+
     def run(self):
         rate = rospy.Rate(60)
         while not rospy.is_shutdown():
+
+            # ----------- INPUT HANDLING -----------
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     rospy.signal_shutdown("Window closed")
 
+                # DIFFICULTY SELECTION IN WELCOME SCREEN
+                if event.type == pygame.KEYDOWN and self.state == "WELCOME":
+
+                    # Select difficulty
+                    if event.key == pygame.K_e:
+                        self.selected_difficulty = "easy"
+                        self.set_difficulty("easy")
+
+                    elif event.key == pygame.K_m:
+                        self.selected_difficulty = "medium"
+                        self.set_difficulty("medium")
+
+                    elif event.key == pygame.K_h:
+                        self.selected_difficulty = "hard"
+                        self.set_difficulty("hard")
+
+                    # Start only after selecting difficulty
+                    if event.key == pygame.K_RETURN and self.selected_difficulty is not None:
+                        rospy.loginfo("Starting game...")
+                        self.start_pub.publish("START")
+
+            # ----------- DRAWING -----------
             self.screen.fill(self.BLACK)
 
             if self.state == "WELCOME":
+
+                # Background
                 if self.background_image:
                     self.screen.blit(self.background_image, (0, 0))
+
+                # WELCOME
                 welcome_text = self.font_welcome.render("WELCOME", True, self.YELLOW)
-                welcome_rect = welcome_text.get_rect(center=(self.screen_width/2, 80))
                 welcome_border = self.font_welcome.render("WELCOME", True, self.BLACK)
-                self.screen.blit(welcome_border, (welcome_rect.x + 2, welcome_rect.y + 2))
+                welcome_rect = welcome_text.get_rect(center=(self.screen_width/2, 120))
+                self.screen.blit(welcome_border, (welcome_rect.x + 3, welcome_rect.y + 3))
                 self.screen.blit(welcome_text, welcome_rect)
-                msg_text = "Waiting for User Info from ROS..."
-                info_text = self.font_info.render(msg_text, True, self.WHITE)
+
+                # Difficulty highlight
+                easy_color = self.YELLOW if self.selected_difficulty == "easy" else self.WHITE
+                medium_color = self.YELLOW if self.selected_difficulty == "medium" else self.WHITE
+                hard_color = self.YELLOW if self.selected_difficulty == "hard" else self.WHITE
+
+                easy_text = self.font_info.render("E - EASY", True, easy_color)
+                medium_text = self.font_info.render("M - MEDIUM", True, medium_color)
+                hard_text = self.font_info.render("H - HARD", True, hard_color)
+
+                self.screen.blit(easy_text, (self.screen_width/2 - 60, self.screen_height/2 - 40))
+                self.screen.blit(medium_text, (self.screen_width/2 - 60, self.screen_height/2))
+                self.screen.blit(hard_text, (self.screen_width/2 - 60, self.screen_height/2 + 40))
+
+                # ENTER prompt
+                if self.selected_difficulty is not None:
+                    enter_text = self.font_info.render("Press ENTER to start", True, self.WHITE)
+                    enter_rect = enter_text.get_rect(center=(self.screen_width/2, self.screen_height/2 + 120))
+                    self.screen.blit(enter_text, enter_rect)
+
+                # Waiting for user info
+                info_text = self.font_info.render("Waiting for User Info from ROS...", True, self.WHITE)
                 info_rect = info_text.get_rect(center=(self.screen_width/2, self.screen_height - 50))
                 self.screen.blit(info_text, info_rect)
-            
+
             elif self.state == "RUNNING":
                 self.draw_map()
                 self.draw_crown()
                 self.draw_donkey_kong()
-                self.draw_coins() 
+                self.draw_coins()
                 self.draw_barrels()
-                self.draw_hearts() # Dibujar corazones recibidos
-                self.draw_player_original() 
+                self.draw_hearts()
+                self.draw_player_original()
                 self.draw_ui()
 
             elif self.state == "GAME_OVER":
                 self.screen.fill((50, 0, 0))
-                font = pygame.font.SysFont("Arial", 60)
-                text = font.render("GAME OVER", True, self.WHITE)
-                score_msg = font.render(f"Final Score: {self.score}", True, self.WHITE)
-                self.screen.blit(text, (250, 200))
-                self.screen.blit(score_msg, (250, 300))
-                restart_msg = self.font_info.render("Press any key to Restart", True, self.YELLOW)
-                restart_rect = restart_msg.get_rect(center=(self.screen_width/2, self.screen_height/2 + 100))
-                self.screen.blit(restart_msg, restart_rect)
+                text = self.font_gameover.render("GAME OVER", True, self.WHITE)
+                score_msg = self.font_info.render(f"Final Score: {self.score}", True, self.WHITE)
+                self.screen.blit(text, (200, 200))
+                self.screen.blit(score_msg, (280, 300))
 
+            # Display frame
             pygame.display.flip()
             rate.sleep()
+
 
 if __name__ == '__main__':
     try:
