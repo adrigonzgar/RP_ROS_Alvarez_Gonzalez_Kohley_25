@@ -66,6 +66,17 @@ class GameNode:
     def __init__(self):
         rospy.init_node('game_node', anonymous=True)
 
+        # --- INITIALIZE ROS PARAMETERS ---
+        # 1. user_name (String)
+        rospy.set_param('user_name', 'Unknown')
+        
+        # 2. change_player_color (Int64) - Default 1 (Red)
+        if not rospy.has_param('change_player_color'):
+            rospy.set_param('change_player_color', 1)
+            
+        # 3. screen_param (String) - Default phase1
+        rospy.set_param('screen_param', 'phase1')
+
         # --- GAME VARIABLES ---
         self.player_name = ""
         self.player_username = "Unknown"
@@ -131,18 +142,18 @@ class GameNode:
             [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
             [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
             [0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0],
-            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], # Row 14
+            [0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0], 
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0,2,0,0,0,0,2,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0], # Row 18
+            [0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,0], 
             [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
             [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
             [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
             [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] 
         ]
-        # Initial Setup 
+        
         self.setup_level(self.current_difficulty_level)
 
         # --- PUBLISHERS ---
@@ -174,13 +185,11 @@ class GameNode:
         else:
             return GetUserScoreResponse(0)
 
-    # --- SETUP LEVEL (MAP & PLATFORMS) ---
+    # --- SETUP LEVEL ---
     def setup_level(self, diff):
-        # 1. Reset Map to Original State (clean slate)
         self.level_map = copy.deepcopy(self.original_level_map)
         self.moving_platforms = []
         
-        # 2. Configure based on Difficulty
         if diff == "easy":
             self.barrel_spawn_rate = 3.5      
             self.barrel_gravity_val = 0.3     
@@ -190,11 +199,8 @@ class GameNode:
             self.barrel_spawn_rate = 2.0      
             self.barrel_gravity_val = 0.5     
             self.barrel_speed_range = [-3, 3] 
-
-            # Row 14 Holes
             for c in range(2, 8): self.level_map[14][c] = 0
             for c in range(12, 18): self.level_map[14][c] = 0
-            # Platforms
             self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))  
             self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40)) 
             
@@ -202,24 +208,17 @@ class GameNode:
             self.barrel_spawn_rate = 0.8      
             self.barrel_gravity_val = 0.9     
             self.barrel_speed_range = [-5, 5] 
-            
-            # Row 14 Holes
             for c in range(2, 8): self.level_map[14][c] = 0
             for c in range(12, 18): self.level_map[14][c] = 0
-            # Row 18 Holes
             for c in range(1, 9): self.level_map[18][c] = 0
             for c in range(11, 19): self.level_map[18][c] = 0
-            
-            # Platforms
             self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))
             self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40))
             self.moving_platforms.append(MovingPlatform(40, 18 * 25, 320, 25, 30))
             self.moving_platforms.append(MovingPlatform(440, 18 * 25, 320, 25, 30))
 
-    # --- HANDLE DIFFICULTY SERVICE ---
     def handle_set_difficulty(self, req):
         rospy.loginfo(f"Request to change difficulty to: {req.change_difficulty}")
-        
         if self.current_state != "WELCOME":
             return SetGameDifficultyResponse(False, "Error: Can only change difficulty in Start Screen")
 
@@ -242,6 +241,10 @@ class GameNode:
         self.player_name = msg.name
         self.player_username = msg.username
         self.player_age = msg.age
+        
+        # --- UPDATE PARAM: user_name ---
+        rospy.set_param('user_name', self.player_name)
+        
         self.Welcome()
 
     def callback_keyboard(self, msg):
@@ -252,15 +255,23 @@ class GameNode:
             else:
                 self.Game() 
             return
+        
         if self.current_state == "GAME_OVER":
-            self.Welcome()
+            if command == "RESET": 
+                self.Welcome()
             return
+        
+        if self.current_state == "VICTORY": 
+            if command == "RESET": 
+                self.Welcome()
+            return
+            
         if self.current_state == "RUNNING":
             self.process_command(command)
             dist_to_crown = abs(self.player_x - 380) + abs(self.player_y - 50)
             if dist_to_crown < 50:
                 self.score += 1000 * self.lives 
-                self.Final()
+                self.Victory()
 
     def process_command(self, command):
         if command == "LEFT": self.player_x -= self.speed
@@ -308,8 +319,6 @@ class GameNode:
             self.player_y += self.vel_y
 
         self.is_on_ground = False
-        
-        # 1. COLLISION WITH MOVING PLATFORMS
         if self.vel_y >= 0: 
             for p in self.moving_platforms:
                 if center_x > p.x and center_x < p.x + p.width:
@@ -319,7 +328,6 @@ class GameNode:
                         self.is_on_ground = True
                         self.player_x += p.speed * p.direction 
 
-        # 2. COLLISION WITH STATIC MAP
         if not self.is_on_ground and not self.is_on_ladder and self.vel_y >= 0:
             tile_below = self.get_tile_at(center_x, self.player_y + self.player_h + 1)
             if tile_below == 1:
@@ -327,7 +335,6 @@ class GameNode:
                 self.player_y = (row * self.block_height) - self.player_h
                 self.vel_y = 0
                 self.is_on_ground = True
-            
             if self.player_y >= 520:
                 self.player_y = 520
                 self.vel_y = 0
@@ -350,7 +357,6 @@ class GameNode:
             center_bx = b.x + 10
             feet_by = b.y + 20
             tile_below = self.get_tile_at(center_bx, feet_by)
-            
             landed = False
             
             if tile_below == 1: 
@@ -430,6 +436,9 @@ class GameNode:
 
     def Welcome(self):
         self.current_state = "WELCOME"
+        # --- UPDATE PARAM: screen_param ---
+        rospy.set_param('screen_param', 'phase1')
+        
         self.player_x = 50
         self.player_y = 520
         self.score = 0
@@ -437,10 +446,6 @@ class GameNode:
         self.lives = self.start_lives 
         self.barrels = []
         self.hearts = [] 
-        # --- FIX: DO NOT CLEAR PLATFORMS HERE ---
-        # If we clear them, the update loop sends empty data to pygame, 
-        # and pygame clears its list.
-        # Platforms will be correctly reset/setup in self.Game() or handle_set_difficulty()
         
         for c in self.coins: c.active = True
         rospy.loginfo("--- WELCOME ---")
@@ -448,21 +453,36 @@ class GameNode:
 
     def Game(self):
         self.current_state = "RUNNING"
+        # --- UPDATE PARAM: screen_param ---
+        rospy.set_param('screen_param', 'phase2')
+        
         self.score = 0
         self.lives = self.start_lives
         self.barrels = []
         self.hearts = [] 
-        
-        # --- CRITICAL: REGENERATE MAP AND PLATFORMS ---
         self.setup_level(self.current_difficulty_level)
-        
         for c in self.coins: c.active = True
         self.last_barrel_time = rospy.get_time()
         self.last_heart_spawn_time = rospy.get_time()
         rospy.loginfo(f"--- GAME START ---")
 
+    def Victory(self):
+        self.current_state = "VICTORY"
+        # --- UPDATE PARAM: screen_param ---
+        rospy.set_param('screen_param', 'phase3')
+        
+        rospy.loginfo(f"--- VICTORY! Score {self.score} ---")
+        msg = Int64()
+        msg.data = self.score
+        self.result_publisher.publish(msg)
+        self.publish_game_state()
+
     def Final(self):
         self.current_state = "GAME_OVER"
+        # --- UPDATE PARAM: screen_param ---
+        rospy.set_param('screen_param', 'phase3')
+        
+        rospy.loginfo(f"--- GAME OVER: Score {self.score} ---")
         msg = Int64()
         msg.data = self.score
         self.result_publisher.publish(msg)

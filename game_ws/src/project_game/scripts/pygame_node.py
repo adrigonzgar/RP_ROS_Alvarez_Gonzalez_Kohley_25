@@ -11,9 +11,93 @@ import rospy
 import pygame
 import os 
 import copy
+import math
 from project_game.msg import game_state
 from std_msgs.msg import String
 from project_game.srv import SetGameDifficulty
+
+# --- VICTORY SCREEN CLASS ---
+class VictoryScreen:
+    def __init__(self, screen_width, screen_height):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.animation_frame = 0
+        self.firework_particles = []
+        self.RED = (255, 0, 0)
+        self.YELLOW = (255, 255, 0)
+        self.GREEN = (0, 255, 0)
+        self.BLUE = (0, 0, 255)
+        self.WHITE = (255, 255, 255)
+        
+    def create_firework(self):
+        x = pygame.math.Vector2(
+            self.screen_width // 2 + (200 * math.cos(self.animation_frame * 0.1)),
+            self.screen_height // 2 + (200 * math.sin(self.animation_frame * 0.1))
+        )
+        for _ in range(20):
+            angle = (360 / 20) * _ + self.animation_frame
+            speed = 3
+            velocity = pygame.math.Vector2(
+                speed * math.cos(math.radians(angle)),
+                speed * math.sin(math.radians(angle))
+            )
+            color = [self.RED, self.YELLOW, self.GREEN, self.BLUE, (255, 0, 255)][_ % 5]
+            self.firework_particles.append({
+                'pos': x.copy(),
+                'vel': velocity,
+                'color': color,
+                'life': 60
+            })
+    
+    def update_fireworks(self):
+        for particle in self.firework_particles[:]:
+            particle['pos'] += particle['vel']
+            particle['vel'].y += 0.1
+            particle['life'] -= 1
+            if particle['life'] <= 0:
+                self.firework_particles.remove(particle)
+    
+    def draw_fireworks(self, screen):
+        for particle in self.firework_particles:
+            alpha = int(255 * (particle['life'] / 60))
+            size = max(1, int(4 * (particle['life'] / 60)))
+            pygame.draw.circle(screen, particle['color'], 
+                             (int(particle['pos'].x), int(particle['pos'].y)), size)
+    
+    def draw(self, screen, score):
+        self.animation_frame += 1
+        if self.animation_frame % 30 == 0:
+            self.create_firework()
+        self.update_fireworks()
+        
+        for y in range(self.screen_height):
+            color_value = int(20 + (y / self.screen_height) * 40)
+            pygame.draw.line(screen, (0, 0, color_value), (0, y), (self.screen_width, y))
+        
+        self.draw_fireworks(screen)
+        
+        font_huge = pygame.font.SysFont("Arial Black", 96)
+        font_large = pygame.font.SysFont("Arial Black", 64)
+        font_medium = pygame.font.SysFont("Arial", 48)
+        font_small = pygame.font.SysFont("Arial", 36)
+        
+        bounce = int(10 * math.sin(self.animation_frame * 0.1))
+        
+        victory_text = font_huge.render("VICTORY!", True, self.YELLOW)
+        victory_rect = victory_text.get_rect(center=(self.screen_width // 2, 100 + bounce))
+        screen.blit(victory_text, victory_rect)
+        
+        subtitle_text = font_large.render("You reached the Crown!", True, self.WHITE)
+        subtitle_rect = subtitle_text.get_rect(center=(self.screen_width // 2, 200))
+        screen.blit(subtitle_text, subtitle_rect)
+        
+        score_text = font_medium.render(f"FINAL SCORE: {score}", True, self.GREEN)
+        score_rect = score_text.get_rect(center=(self.screen_width // 2, 350))
+        screen.blit(score_text, score_rect)
+        
+        instructions = font_small.render("Press ENTER to return to menu", True, self.WHITE)
+        instructions_rect = instructions.get_rect(center=(self.screen_width // 2, self.screen_height - 60))
+        screen.blit(instructions, instructions_rect)
 
 class PygameNode:
     def __init__(self):
@@ -27,6 +111,7 @@ class PygameNode:
         pygame.display.set_caption("Donkey Kong ROS")
 
         self.clock = pygame.time.Clock()
+        self.victory_screen = VictoryScreen(self.screen_width, self.screen_height)
 
         # --- Variables ---
         self.state = "WELCOME"
@@ -34,7 +119,7 @@ class PygameNode:
         self.player_y = 300
         self.score = 0
         self.lives = 3
-        self.selected_difficulty = None # Initial state
+        self.selected_difficulty = None
 
         self.barrels_data = []
         self.coins_data = [] 
@@ -51,7 +136,7 @@ class PygameNode:
         self.YELLOW_LADDER = (255, 255, 0)
         self.PINK = (255, 105, 180)
         
-        # Sprites
+        # Sprites Defaults
         self.M_SHIRT = (255, 0, 0)      
         self.M_OVERALLS = (0, 0, 255)   
         self.M_SKIN = (255, 200, 150)   
@@ -189,15 +274,12 @@ class PygameNode:
             self.level_map = copy.deepcopy(self.original_level_map)
             
             if level == "medium":
-                # Clear Row 14 holes
                 for c in range(2, 8): self.level_map[14][c] = 0
                 for c in range(12, 18): self.level_map[14][c] = 0
             
             elif level == "hard":
-                # Clear Row 14 holes
                 for c in range(2, 8): self.level_map[14][c] = 0
                 for c in range(12, 18): self.level_map[14][c] = 0
-                # Clear Row 18 holes
                 for c in range(1, 9): self.level_map[18][c] = 0
                 for c in range(11, 19): self.level_map[18][c] = 0
                 
@@ -233,6 +315,20 @@ class PygameNode:
     def draw_player_original(self):
         x = self.player_x
         y = self.player_y
+        
+        # --- COLOR LOGIC FROM PARAM ---
+        color_choice = rospy.get_param('change_player_color', 1)
+        
+        if color_choice == 1: # Red (Mario)
+            self.M_SHIRT = (255, 0, 0)
+            self.M_OVERALLS = (0, 0, 255)
+        elif color_choice == 2: # Purple (Waluigi)
+            self.M_SHIRT = (128, 0, 128)
+            self.M_OVERALLS = (50, 50, 50)
+        elif color_choice == 3: # Blue (Luigi/Blue)
+            self.M_SHIRT = (0, 0, 255)
+            self.M_OVERALLS = (0, 150, 0)
+        
         pygame.draw.rect(self.screen, self.M_SKIN, (x + 4, y, 16, 10))
         pygame.draw.rect(self.screen, self.M_SHIRT, (x, y, 24, 4))
         pygame.draw.rect(self.screen, self.M_SHIRT, (x + 4, y - 2, 16, 4)) 
@@ -304,6 +400,7 @@ class PygameNode:
                         elif event.key == pygame.K_UP: self.start_pub.publish("UP")
                         elif event.key == pygame.K_DOWN: self.start_pub.publish("DOWN")
                     elif self.state == "WELCOME":
+                        # DIFFICULTY
                         if event.key == pygame.K_e:
                             self.selected_difficulty = "easy"
                             self.set_difficulty("easy")
@@ -314,12 +411,22 @@ class PygameNode:
                             self.selected_difficulty = "hard"
                             self.set_difficulty("hard")
                         
+                        # COLOR SELECTION (ROS PARAM)
+                        if event.key == pygame.K_1:
+                            rospy.set_param('change_player_color', 1)
+                        elif event.key == pygame.K_2:
+                            rospy.set_param('change_player_color', 2)
+                        elif event.key == pygame.K_3:
+                            rospy.set_param('change_player_color', 3)
+
                         if event.key == pygame.K_RETURN and self.selected_difficulty is not None:
-                            # --- CRITICAL FIX: FORCE RESYNC ON START ---
                             self.set_difficulty(self.selected_difficulty)
-                            
                             rospy.loginfo("Starting game...")
                             self.start_pub.publish("START")
+                    
+                    elif self.state == "VICTORY" or self.state == "GAME_OVER":
+                        if event.key == pygame.K_RETURN: 
+                            self.start_pub.publish("RESET")
 
             self.screen.fill(self.BLACK)
 
@@ -327,23 +434,42 @@ class PygameNode:
                 if self.background_image: self.screen.blit(self.background_image, (0, 0))
                 welcome_text = self.font_welcome.render("WELCOME", True, self.YELLOW)
                 welcome_border = self.font_welcome.render("WELCOME", True, self.BLACK)
-                welcome_rect = welcome_text.get_rect(center=(self.screen_width/2, 120))
+                welcome_rect = welcome_text.get_rect(center=(self.screen_width/2, 80))
                 self.screen.blit(welcome_border, (welcome_rect.x + 3, welcome_rect.y + 3))
                 self.screen.blit(welcome_text, welcome_rect)
                 
+                # DIFFICULTY TEXT
                 easy_color = self.YELLOW if self.selected_difficulty == "easy" else self.WHITE
                 medium_color = self.YELLOW if self.selected_difficulty == "medium" else self.WHITE
                 hard_color = self.YELLOW if self.selected_difficulty == "hard" else self.WHITE
                 easy_text = self.font_info.render("E - EASY", True, easy_color)
                 medium_text = self.font_info.render("M - MEDIUM", True, medium_color)
                 hard_text = self.font_info.render("H - HARD", True, hard_color)
-                self.screen.blit(easy_text, (self.screen_width/2 - 60, self.screen_height/2 - 40))
-                self.screen.blit(medium_text, (self.screen_width/2 - 60, self.screen_height/2))
-                self.screen.blit(hard_text, (self.screen_width/2 - 60, self.screen_height/2 + 40))
+                
+                # COLOR TEXT (New Visuals)
+                current_color = rospy.get_param('change_player_color', 1)
+                c1_color = self.YELLOW if current_color == 1 else self.WHITE
+                c2_color = self.YELLOW if current_color == 2 else self.WHITE
+                c3_color = self.YELLOW if current_color == 3 else self.WHITE
+                
+                col1_text = self.font_info.render("1 - RED", True, c1_color)
+                col2_text = self.font_info.render("2 - PURPLE", True, c2_color)
+                col3_text = self.font_info.render("3 - BLUE", True, c3_color)
+
+                # Positioning
+                # Difficulty
+                self.screen.blit(easy_text, (self.screen_width/2 - 200, 200))
+                self.screen.blit(medium_text, (self.screen_width/2 - 200, 240))
+                self.screen.blit(hard_text, (self.screen_width/2 - 200, 280))
+                
+                # Colors
+                self.screen.blit(col1_text, (self.screen_width/2 + 50, 200))
+                self.screen.blit(col2_text, (self.screen_width/2 + 50, 240))
+                self.screen.blit(col3_text, (self.screen_width/2 + 50, 280))
                 
                 if self.selected_difficulty is not None:
                     enter_text = self.font_info.render("Press ENTER to start", True, self.WHITE)
-                    enter_rect = enter_text.get_rect(center=(self.screen_width/2, self.screen_height/2 + 120))
+                    enter_rect = enter_text.get_rect(center=(self.screen_width/2, 450))
                     self.screen.blit(enter_text, enter_rect)
                 info_text = self.font_info.render("Waiting for User Info from ROS...", True, self.WHITE)
                 info_rect = info_text.get_rect(center=(self.screen_width/2, self.screen_height - 50))
@@ -360,12 +486,17 @@ class PygameNode:
                 self.draw_player_original()
                 self.draw_ui()
 
+            elif self.state == "VICTORY":
+                self.victory_screen.draw(self.screen, self.score)
+
             elif self.state == "GAME_OVER":
                 self.screen.fill((50, 0, 0))
                 text = self.font_gameover.render("GAME OVER", True, self.WHITE)
                 score_msg = self.font_info.render(f"Final Score: {self.score}", True, self.WHITE)
                 self.screen.blit(text, (200, 200))
                 self.screen.blit(score_msg, (280, 300))
+                restart_msg = self.font_info.render("Press ENTER to Restart", True, self.YELLOW)
+                self.screen.blit(restart_msg, (220, 400))
 
             pygame.display.flip()
             rate.sleep()
