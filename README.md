@@ -1,129 +1,183 @@
 # RP_ROS_Alvarez_Gonzalez_Kohley_25
-Nuevo repositorio para la entrega de ROS debido a problemas con el anterior
 
-
-Proyecto desarrollado en ROS Noetic donde se integra un juego 2D controlado mediante nodos ROS, con visualización en Pygame y comunicación modular entre nodos.  
-El objetivo del proyecto es demostrar interacción en tiempo real entre ROS, entradas de teclado, lógica de juego distribuida y visualización gráfica.
+ROS Noetic project that integrates a 2D game controlled through ROS nodes, with graphics rendered using Pygame and modular communication between nodes. The goal of the project is to demonstrate real-time interaction between ROS, keyboard input, distributed game logic, and graphical visualization.
 
 ---
 
-## 🧩 **Arquitectura del Sistema**
+## System Overview
 
-El sistema está compuesto por **6 nodos ROS** que se comunican entre sí mediante *topics*:
-      ┌───────────────────┐
-      │   INFO_USER_NODE  │
-      └─────────┬─────────┘
-                │ publishes user_msg
-                ▼
-      ┌───────────────────┐
-      │     GAME_NODE     │ <────────── keyboard_control  ─────────┐
-      └───────┬────┬─────┘                                        │
-              │    │                                               │
-         result   game_state                                        │
-              │    │                                               │
-              ▼    ▼                                               │
-    ┌──────────┐   ┌─────────────┐                                │
-    │RESULT_NODE│   │PYGAME_NODE  │ <──────────── CONTROL_NODE ────┘
-    └──────────┘   └─────────────┘
-
-
-## 🧩 **Descripción de Nodos**
-
-### ✔ `info_user.py`
-Solicita al usuario su nombre, edad y username, y publica los datos por el topic: user_information (project_game/user_msg)
-
-### ✔ `control_node.py`
-Lee el teclado del usuario y publica comandos como:
-
-- `"UP"`
-- `"DOWN"`
-- `"LEFT"`
-- `"RIGHT"`
-
-en el topic: keyboard_control (std_msgs/String)
-
-
-### ✔ `game_node.py`
-Es el núcleo lógico del sistema. Contiene los estados:
-
-- `WELCOME`
-- `RUNNING`
-- `GAME_OVER`
-
-Publica el estado en tiempo real: game_state (project_game/game_state) y envía puntuación final a:
-
-result_information (std_msgs/Int64)
-
-### ✔ `pygame_node.py`
-Ventana gráfica creada con **Pygame**.  
-Recibe el estado del juego y renderiza:
-
-- pantalla de bienvenida  
-- jugador en movimiento  
-- marcador  
-- pantalla de game over  
+This project consists of five ROS nodes working together to implement a fully interactive 2D game. Each component is isolated into its own node to ensure modularity and clean communication through ROS topics, services, and parameters.
 
 ---
 
-### ✔ `result_node.py`
-Recibe el score final y muestra el resultado al usuario, o lo guarda si se amplía con JSON.
+## Node Descriptions
+
+### info_user.py
+Collects user information from the terminal:
+- Real name  
+- Username  
+- Age  
+
+Publishes the data on the topic: user_information (project_game/user_msg)
+
+Also sets a ROS parameter indicating that user data is ready.
 
 ---
 
-## 🎮 **Mensajes ROS**
+### control_node.py
+Handles global keyboard input using pynput.  
+Publishes commands to the topic: keyboard_control (std_msgs/String)
 
-### `user_msg.msg`
-```txt
-string name
-string username
-int64 age
+Supported commands:
+- LEFT, RIGHT, UP, DOWN  
+- START (Enter key)  
+- RESET  
+- DIFF_EASY, DIFF_MEDIUM, DIFF_HARD  
+- COLOR_1, COLOR_2, COLOR_3  
 
-### `game_state.msg`
-int64 player_x
-int64 player_y
-int64 score
-string state
+This node performs all keyboard reading so that the pygame window can focus exclusively on rendering.
 
+---
 
+### game_node.py
+Main controller of the game logic. It handles:
+- Player physics (movement, gravity, ladders)  
+- Collisions with platforms, barrels, coins, and hearts  
+- Score and life system  
+- Difficulty configuration  
+- Player color through ROS parameters  
+- State transitions: WELCOME, RUNNING, VICTORY, GAME_OVER  
 
+Publishes:
+- game_state  
+- result_information  
+- barrels_data  
+- coins_data  
+- hearts_data  
+- moving_platforms_data  
 
-🚀 Cómo Compilar
+Provides services:
+- GetUserScore  
+- SetGameDifficulty  
 
-Dentro del workspace:
+Receives commands from keyboard_control.
+
+---
+
+### pygame_node.py
+Handles rendering of the entire game interface.
+
+Draws:
+- Welcome screen with difficulty and color highlighting  
+- Player sprite  
+- Platforms, ladders  
+- Barrels, coins, hearts  
+- Donkey Kong and crown  
+- Score and lives  
+- Victory animation  
+- Game Over screen  
+
+This node does not handle any keyboard input.
+
+---
+
+### result_node.py
+Receives the final score and prints a summary.  
+Optionally could store results in JSON.
+
+---
+
+## ROS Messages & Services
+
+user_msg.msg contains:
+- string name  
+- string username  
+- int64 age  
+
+game_state.msg contains:
+- int64 player_x  
+- int64 player_y  
+- int64 score  
+- string state  
+- int64 lives  
+- string difficulty  
+- int64 color  
+
+GetUserScore.srv:
+- Request: username  
+- Response: score  
+
+SetGameDifficulty.srv:
+- Request: change_difficulty  
+- Response: success, message  
+
+---
+
+## Project Structure
+
+game_ws/  
+ ├── src/  
+ │    └── project_game/  
+ │         ├── msg/  
+ │         ├── srv/  
+ │         ├── scripts/  
+ │         ├── launch/  
+ │         ├── CMakeLists.txt  
+ │         └── package.xml  
+ ├── compilar  
+ ├── install_deps.sh  
+ └── requirements.txt  
+
+---
+
+## Installation & Dependencies
+
+To install all dependencies:
+./install_deps.sh
+
+To build the workspace:
 ./compilar
 
-Este script:
+The script:
+- Runs catkin_make  
+- Sources devel/setup.bash  
 
-ejecuta catkin_make
+---
 
-hace source devel/setup.bash
+## Running the Game
 
-lanza roscore
+Run:
+cd game_ws  
+source devel/setup.bash  
+roslaunch project_game game.launch  
 
-🚀 Cómo Ejecutar los Nodos
+This automatically launches:
+- info_user  
+- control_node  
+- game_node  
+- pygame_node  
+- result_node  
 
-Cada nodo se lanza desde una terminal distinta con:
+---
 
-./run_nodes info
-./run_nodes control
-./run_nodes game
-./run_nodes pygame
-./run_nodes result
+## Controls
 
-ESTRUCTURA DEL PROYECTO
+Arrow Keys → Move  
+Enter → Start game  
+R → Reset  
+E / M / H → Select difficulty  
+1 / 2 / 3 → Select player color  
 
-game_ws/
- ├── src/
- │    └── project_game/
- │         ├── msg/
- │         │    ├── user_msg.msg
- │         │    └── game_state.msg
- │         ├── scripts/
- │         │    ├── info_user.py
- │         │    ├── control_node.py
- │         │    ├── game_node.py
- │         │    └── pygame_node.py
- │         ├── CMakeLists.txt
- │         └── package.xml
- ├── compilar
- └── run_nodes
+---
+
+## Suggested Improvements
+
+- Add audio using pygame.mixer  
+- Improve animations (walking, jumping)  
+- Add more levels or procedural maps  
+- Implement new enemy types  
+- Persistent high-score leaderboard (JSON/YAML)  
+- Power-ups or special items  
+- Enhanced sprite artwork  
+
+---
