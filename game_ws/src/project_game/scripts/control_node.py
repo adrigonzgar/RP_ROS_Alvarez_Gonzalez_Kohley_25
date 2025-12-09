@@ -18,7 +18,10 @@ class ControlNode:
         # Publisher: Topic 'keyboard_control' - Type String
         self.publisher = rospy.Publisher('keyboard_control', String, queue_size=10)
         
-        rospy.loginfo("CONTROL_NODE started. Use ARROW KEYS to move. Press 'q' to quit.")
+        rospy.loginfo("CONTROL_NODE started.")
+        rospy.loginfo("Use ARROW KEYS to move.")
+        rospy.loginfo("Press ENTER, E, M, H, 1, 2, 3 for game controls.")
+        rospy.loginfo("Press 'q' to quit.")
         
         self.run()
 
@@ -31,6 +34,8 @@ class ControlNode:
             key = sys.stdin.read(1)
             if key == '\x1b': # Escape sequence for arrows
                 key += sys.stdin.read(2)
+            elif key == '\r' or key == '\n': # Enter key
+                key = '\r'  # Normalize to \r
         else:
             key = ''
         
@@ -58,6 +63,20 @@ class ControlNode:
                     command = "RIGHT"
                 elif key == '\x1b[D':
                     command = "LEFT"
+                elif key == '\r' or key == '\n':  # Enter key
+                    command = "ENTER"
+                elif key.lower() == 'e':
+                    command = "E"
+                elif key.lower() == 'm':
+                    command = "M"
+                elif key.lower() == 'h':
+                    command = "H"
+                elif key == '1':
+                    command = "1"
+                elif key == '2':
+                    command = "2"
+                elif key == '3':
+                    command = "3"
                 elif key == 'q':
                     print("\nExiting...")
                     break

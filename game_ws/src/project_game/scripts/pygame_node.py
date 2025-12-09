@@ -214,6 +214,8 @@ class PygameNode:
         self.player_y = msg.player_y
         self.score = msg.score
         if hasattr(msg, 'lives'): self.lives = msg.lives
+        if hasattr(msg, 'difficulty') and msg.difficulty:
+            self.selected_difficulty = msg.difficulty
 
     def callback_barrels(self, msg):
         raw_data = msg.data
@@ -393,40 +395,7 @@ class PygameNode:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     rospy.signal_shutdown("Window closed")
-                if event.type == pygame.KEYDOWN:
-                    if self.state == "RUNNING":
-                        if event.key == pygame.K_LEFT: self.start_pub.publish("LEFT")
-                        elif event.key == pygame.K_RIGHT: self.start_pub.publish("RIGHT")
-                        elif event.key == pygame.K_UP: self.start_pub.publish("UP")
-                        elif event.key == pygame.K_DOWN: self.start_pub.publish("DOWN")
-                    elif self.state == "WELCOME":
-                        # DIFFICULTY
-                        if event.key == pygame.K_e:
-                            self.selected_difficulty = "easy"
-                            self.set_difficulty("easy")
-                        elif event.key == pygame.K_m:
-                            self.selected_difficulty = "medium"
-                            self.set_difficulty("medium")
-                        elif event.key == pygame.K_h:
-                            self.selected_difficulty = "hard"
-                            self.set_difficulty("hard")
-                        
-                        # COLOR SELECTION (ROS PARAM)
-                        if event.key == pygame.K_1:
-                            rospy.set_param('change_player_color', 1)
-                        elif event.key == pygame.K_2:
-                            rospy.set_param('change_player_color', 2)
-                        elif event.key == pygame.K_3:
-                            rospy.set_param('change_player_color', 3)
-
-                        if event.key == pygame.K_RETURN and self.selected_difficulty is not None:
-                            self.set_difficulty(self.selected_difficulty)
-                            rospy.loginfo("Starting game...")
-                            self.start_pub.publish("START")
-                    
-                    elif self.state == "VICTORY" or self.state == "GAME_OVER":
-                        if event.key == pygame.K_RETURN: 
-                            self.start_pub.publish("RESET")
+                # Keyboard input disabled - all input now comes from control_node via ROS topic
 
             self.screen.fill(self.BLACK)
 

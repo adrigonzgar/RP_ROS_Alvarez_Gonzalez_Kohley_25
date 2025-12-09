@@ -102,6 +102,7 @@ class GameNode:
 
         # --- DIFFICULTY VARIABLES ---
         self.current_difficulty_level = "medium"
+        self.difficulty_selected = False  # Track if user explicitly selected a difficulty
         self.barrel_spawn_rate = 2.0 
         self.barrel_gravity_val = 0.5
         self.barrel_speed_range = [-3, 3]
@@ -250,19 +251,55 @@ class GameNode:
     def callback_keyboard(self, msg):
         command = msg.data
         if self.current_state == "WELCOME":
-            if command == "START": 
-                self.Game()
-            else:
-                self.Game() 
+            # Handle difficulty selection
+            if command == "E":
+                self.current_difficulty_level = "easy"
+                self.setup_level("easy")
+                self.difficulty_selected = True
+                rospy.loginfo("Difficulty set to: EASY")
+                self.publish_game_state()
+            elif command == "M":
+                self.current_difficulty_level = "medium"
+                self.setup_level("medium")
+                self.difficulty_selected = True
+                rospy.loginfo("Difficulty set to: MEDIUM")
+                self.publish_game_state()
+            elif command == "H":
+                self.current_difficulty_level = "hard"
+                self.setup_level("hard")
+                self.difficulty_selected = True
+                rospy.loginfo("Difficulty set to: HARD")
+                self.publish_game_state()
+            
+            # Handle color selection
+            elif command == "1":
+                rospy.set_param('change_player_color', 1)
+                rospy.loginfo("Color set to: RED")
+                self.publish_game_state()
+            elif command == "2":
+                rospy.set_param('change_player_color', 2)
+                rospy.loginfo("Color set to: PURPLE")
+                self.publish_game_state()
+            elif command == "3":
+                rospy.set_param('change_player_color', 3)
+                rospy.loginfo("Color set to: BLUE")
+                self.publish_game_state()
+            
+            # Handle start game
+            elif command == "ENTER" or command == "START":
+                if self.difficulty_selected:
+                    self.Game()
+                else:
+                    rospy.logwarn("Please select a difficulty (E/M/H) before starting the game!")
             return
         
         if self.current_state == "GAME_OVER":
-            if command == "RESET": 
+            if command == "RESET" or command == "ENTER": 
                 self.Welcome()
             return
         
         if self.current_state == "VICTORY": 
-            if command == "RESET": 
+            if command == "RESET" or command == "ENTER": 
                 self.Welcome()
             return
             
@@ -445,7 +482,8 @@ class GameNode:
         self.vel_y = 0
         self.lives = self.start_lives 
         self.barrels = []
-        self.hearts = [] 
+        self.hearts = []
+        self.difficulty_selected = False  # Reset difficulty selection when returning to welcome
         
         for c in self.coins: c.active = True
         rospy.loginfo("--- WELCOME ---")
@@ -494,7 +532,9 @@ class GameNode:
         msg.player_y = int(self.player_y)
         msg.score = self.score
         msg.state = self.current_state
-        msg.lives = self.lives 
+        msg.lives = self.lives
+        msg.difficulty = self.current_difficulty_level
+        msg.color = rospy.get_param('change_player_color', 1)
         self.state_publisher.publish(msg)
 
 if __name__ == '__main__':
