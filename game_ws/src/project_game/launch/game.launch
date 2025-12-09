@@ -1,0 +1,17 @@
+<launch>
+    <!-- GAME NODE -->
+    <node name="game_node" pkg="project_game" type="game_node.py" output="screen"/>
+
+    <!-- INFO_USER with input support -->
+    <node name="info_user" pkg="project_game" type="info_user.py"
+          launch-prefix="xterm -e" output="screen"/>
+
+    <!-- CONTROL NODE -->
+    <node name="control_node" pkg="project_game" type="control_node.py" output="screen"/>
+
+    <!-- PYGAME NODE -->
+    <node name="pygame_node" pkg="project_game" type="pygame_node.py" output="screen"/>
+
+    <!-- RESULT NODE -->
+    <node name="result_node" pkg="project_game" type="result_node.py" output="screen"/>
+</launch>
