@@ -203,8 +203,6 @@ class GameNode:
             self.barrel_spawn_rate = 2.0      
             self.barrel_gravity_val = 0.5     
             self.barrel_speed_range = [-3, 3] 
-            for c in range(2, 8): self.level_map[14][c] = 0
-            for c in range(12, 18): self.level_map[14][c] = 0
             self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))  
             self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40)) 
             self.crown = {'x': 390, 'y': 45, 'width': 30, 'height': 30}
@@ -214,10 +212,6 @@ class GameNode:
             self.barrel_gravity_val = 0.9     
             self.barrel_speed_range = [-5, 5] 
             self.crown = {'x': 390, 'y': 45, 'width': 30, 'height': 30}
-            for c in range(2, 8): self.level_map[14][c] = 0
-            for c in range(12, 18): self.level_map[14][c] = 0
-            for c in range(1, 9): self.level_map[18][c] = 0
-            for c in range(11, 19): self.level_map[18][c] = 0
             self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))
             self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40))
             self.moving_platforms.append(MovingPlatform(40, 18 * 25, 320, 25, 30))

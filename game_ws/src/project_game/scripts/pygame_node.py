@@ -216,7 +216,22 @@ class PygameNode:
         self.score = msg.score
         if hasattr(msg, 'lives'): self.lives = msg.lives
         if hasattr(msg, 'difficulty') and msg.difficulty:
-            self.selected_difficulty = msg.difficulty
+            # Si la dificultad ha cambiado (o es la primera vez), actualizamos el dibujo del mapa
+            if self.selected_difficulty != msg.difficulty:
+                self.selected_difficulty = msg.difficulty
+                
+                # Reiniciamos al mapa original
+                self.level_map = copy.deepcopy(self.original_level_map)
+                
+                # APLICAMOS LA OPCIÓN NUCLEAR (Igual que en game_node)
+                if self.selected_difficulty == "medium":
+                    # Borrar toda la fila 14
+                    for c in range(20): self.level_map[14][c] = 0
+                    
+                elif self.selected_difficulty == "hard":
+                    # Borrar filas 14 y 18
+                    for c in range(20): self.level_map[14][c] = 0
+                    for c in range(20): self.level_map[18][c] = 0
 
     def callback_barrels(self, msg):
         raw_data = msg.data
