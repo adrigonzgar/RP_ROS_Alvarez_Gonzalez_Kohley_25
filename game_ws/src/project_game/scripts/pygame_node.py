@@ -215,11 +215,18 @@ class PygameNode:
         self.player_y = msg.player_y
         self.score = msg.score
         if hasattr(msg, 'lives'): self.lives = msg.lives
+        
+        # Always update difficulty selection if present in message
         if hasattr(msg, 'difficulty') and msg.difficulty:
-            # Si la dificultad ha cambiado (o es la primera vez), actualizamos el dibujo del mapa
-            if self.selected_difficulty != msg.difficulty:
-                self.selected_difficulty = msg.difficulty
-                
+            # Get previous difficulty BEFORE updating (for map update check)
+            previous_difficulty = getattr(self, 'selected_difficulty', None)
+            
+            # Always update difficulty selection for highlighting (must happen first!)
+            self.selected_difficulty = msg.difficulty
+            rospy.loginfo(f"Difficulty received and updated to: {msg.difficulty}")
+            
+            # Si la dificultad ha cambiado, actualizamos el dibujo del mapa
+            if previous_difficulty != msg.difficulty:
                 # Reiniciamos al mapa original
                 self.level_map = copy.deepcopy(self.original_level_map)
                 
@@ -456,6 +463,7 @@ class PygameNode:
                     enter_text = self.font_info.render("Press ENTER to start", True, self.WHITE)
                     enter_rect = enter_text.get_rect(center=(self.screen_width/2, 450))
                     self.screen.blit(enter_text, enter_rect)
+                
                 info_text = self.font_info.render("Waiting for User Info from ROS...", True, self.WHITE)
                 info_rect = info_text.get_rect(center=(self.screen_width/2, self.screen_height - 50))
                 self.screen.blit(info_text, info_rect)
@@ -477,10 +485,21 @@ class PygameNode:
             elif self.state == "GAME_OVER":
                 self.screen.fill((50, 0, 0))
                 text = self.font_gameover.render("GAME OVER", True, self.WHITE)
+                
+                # Get username from ROS parameter
+                try:
+                    player_name = rospy.get_param('user_name', 'Player')
+                except:
+                    player_name = 'Player'
+                
+                # Display username and score
+                username_msg = self.font_info.render(f"Player: {player_name}", True, self.WHITE)
                 score_msg = self.font_info.render(f"Final Score: {self.score}", True, self.WHITE)
-                self.screen.blit(text, (200, 200))
-                self.screen.blit(score_msg, (280, 300))
                 restart_msg = self.font_info.render("Press ENTER to Restart", True, self.YELLOW)
+                
+                self.screen.blit(text, (200, 200))
+                self.screen.blit(username_msg, (280, 280))
+                self.screen.blit(score_msg, (280, 320))
                 self.screen.blit(restart_msg, (220, 400))
 
             pygame.display.flip()

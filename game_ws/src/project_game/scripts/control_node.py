@@ -11,6 +11,7 @@ import rospy
 from std_msgs.msg import String
 from project_game.srv import SetGameDifficulty  # <--- IMPORTANTE: Importar el servicio
 import sys, select, tty, termios
+import os
 
 class ControlNode:
     def __init__(self):
@@ -111,7 +112,11 @@ class ControlNode:
                 
                 # --- SALIR ---
                 elif key == 'q':
-                    print("\nExiting...")
+                    print("\nExiting and shutting down all nodes...")
+                    # Kill all ROS nodes
+                    os.system("rosnode kill -a 2>/dev/null")
+                    # Shutdown this node
+                    rospy.signal_shutdown("User requested exit")
                     break
 
                 # Publicar SOLO si se asignó un 'command' (es decir, Topic de Movimiento o Color)
