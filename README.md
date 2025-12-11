@@ -1,2 +1,3 @@
 # RP_ROS_Alvarez_Gonzalez_Kohley_25
-Nuevo repositorio para la entrega de ROS debido a problemas con el anterior
+All work done in "ROS" branch
+New repository for the final proyect because problems with the other
