@@ -7,7 +7,6 @@
 # Adrián Gonzalez García   100523018
 # Lucas Kohley Aguilar     100497018
 
-
 import rospy
 from project_game.msg import user_msg  # Import our custom message
 
@@ -45,7 +44,7 @@ class InfoUserNode:
             # Publish the message
             rospy.loginfo(f"Sending data for: {username_input}...")
             self.publisher.publish(msg)
-            
+                     
 
             # Notify system that user data is ready
             rospy.set_param("/user_ready", True)

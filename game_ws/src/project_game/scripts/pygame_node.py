@@ -43,7 +43,7 @@ class VictoryScreen:
             )
             color = [self.RED, self.YELLOW, self.GREEN, self.BLUE, (255, 0, 255)][_ % 5]
             self.firework_particles.append({
-                'pos': x.copy(),
+                'pos': pygame.math.Vector2(x),
                 'vel': velocity,
                 'color': color,
                 'life': 60
@@ -120,6 +120,7 @@ class PygameNode:
         self.score = 0
         self.lives = 3
         self.selected_difficulty = None
+        self.username = "Player"
 
         self.barrels_data = []
         self.coins_data = [] 
@@ -191,7 +192,7 @@ class PygameNode:
         rospy.Subscriber("coins_data", String, self.callback_coins)
         rospy.Subscriber("hearts_data", String, self.callback_hearts)
         rospy.Subscriber("moving_platforms_data", String, self.callback_platforms)
-
+        
         # Publisher
         self.start_pub = rospy.Publisher("keyboard_control", String, queue_size=1)
 
@@ -474,4 +475,5 @@ if __name__ == '__main__':
     try:
         PygameNode()
     except rospy.ROSInterruptException:
-        pass
+        pass	
+

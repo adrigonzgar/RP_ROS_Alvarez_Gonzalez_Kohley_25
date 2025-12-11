@@ -88,6 +88,8 @@ class GameNode:
         self.score = 0
         self.lives = 3
         self.current_state = "WELCOME"
+        
+        self.player_speed = 10
 
         # --- PHYSICS VARIABLES ---
         self.vel_y = 0          
@@ -97,7 +99,7 @@ class GameNode:
         
         self.player_w = 30
         self.player_h = 30
-        self.is_on_ground = False
+        self.is_on_ground = True
         self.is_on_ladder = False
 
         # --- DIFFICULTY VARIABLES ---
@@ -167,11 +169,11 @@ class GameNode:
         self.platforms_publisher = rospy.Publisher('moving_platforms_data', String, queue_size=10)
 
         # --- SERVICES ---
-        rospy.Service('user_score', GetUserScore, self.handle_get_score)
-        rospy.Service('difficulty', SetGameDifficulty, self.handle_set_difficulty)
+        self.service_score = rospy.Service('user_score', GetUserScore, self.handle_get_user_score)
+        self.service_difficulty = rospy.Service('difficulty', SetGameDifficulty, self.handle_set_difficulty)
 
         # --- SUBSCRIBERS ---
-        rospy.Subscriber("user_information", user_msg, self.callback_user_info)
+        rospy.Subscriber("user_information", user_msg, self.user_callback)
         rospy.Subscriber("keyboard_control", String, self.callback_keyboard)
 
         # --- LOOP ---
@@ -195,6 +197,7 @@ class GameNode:
             self.barrel_spawn_rate = 3.5      
             self.barrel_gravity_val = 0.3     
             self.barrel_speed_range = [-2, 2] 
+            self.crown = {'x': 390, 'y': 45, 'width': 30, 'height': 30}
             
         elif diff == "medium":
             self.barrel_spawn_rate = 2.0      
@@ -204,11 +207,13 @@ class GameNode:
             for c in range(12, 18): self.level_map[14][c] = 0
             self.moving_platforms.append(MovingPlatform(80, 14 * 25, 240, 25, 40))  
             self.moving_platforms.append(MovingPlatform(480, 14 * 25, 240, 25, 40)) 
+            self.crown = {'x': 390, 'y': 45, 'width': 30, 'height': 30}
             
         elif diff == "hard":
             self.barrel_spawn_rate = 0.8      
             self.barrel_gravity_val = 0.9     
             self.barrel_speed_range = [-5, 5] 
+            self.crown = {'x': 390, 'y': 45, 'width': 30, 'height': 30}
             for c in range(2, 8): self.level_map[14][c] = 0
             for c in range(12, 18): self.level_map[14][c] = 0
             for c in range(1, 9): self.level_map[18][c] = 0
@@ -238,78 +243,97 @@ class GameNode:
         col = max(0, min(col, len(self.level_map[0]) - 1))
         return self.level_map[row][col]
 
-    def callback_user_info(self, msg):
-        self.player_name = msg.name
-        self.player_username = msg.username
-        self.player_age = msg.age
-        
-        # --- UPDATE PARAM: user_name ---
+    def user_callback(self, msg):
+        if self.current_state == "RUNNING":
+            return
+        # --------------------------
+
+        rospy.loginfo(f"!!! USER INFO RECEIVED: {msg.username} !!!")
+        self.username = msg.username
+        self.player_name = msg.name # Guardamos nombre real
+
+        # 1. Guardar nombre de usuario en el parámetro para Pygame
         rospy.set_param('user_name', self.player_name)
         
-        self.Welcome()
+        # 2. Iniciar el juego
+        self.Game()
+        
+        
+    # --- AÑADIR ESTOS MÉTODOS ---
+    
+    def handle_get_user_score(self, req):
+        """ Devuelve la puntuación actual al ResultNode """
+        rospy.loginfo(f"Service Request: Score requested for {req.username}")
+        # Retorna la respuesta definida en el .srv (int64 score)
+        return GetUserScoreResponse(self.score)
+
+    def handle_set_difficulty(self, req):
+        """ Cambia la dificultad SOLO si estamos en la fase de bienvenida """
+        rospy.loginfo(f"Service Request: Change difficulty to {req.change_difficulty}")
+        
+        # Lógica: Solo permitimos cambiar si estamos en "WELCOME" (Fase 1)
+        if self.current_state == "WELCOME":
+            if req.change_difficulty in ["easy", "medium", "hard"]:
+                self.current_difficulty_level = req.change_difficulty
+                # Llamamos a setup_level para reajustar plataformas/barriles
+                self.setup_level(self.current_difficulty_level)
+                
+                return SetGameDifficultyResponse(True, f"Difficulty set to {req.change_difficulty}")
+            else:
+                return SetGameDifficultyResponse(False, "Invalid difficulty name")
+        else:
+            return SetGameDifficultyResponse(False, "Cannot change difficulty: Not in Phase 1")
+        
+    # ----------------------------
+    
+    def try_jump(self):
+        # Solo saltamos si estamos tocando el suelo
+        if self.is_on_ground:
+            self.player_vel_y = self.jump_strength
+            self.is_on_ground = False
+            # Opcional: log para depurar
+            rospy.loginfo("JUMPING!")
 
     def callback_keyboard(self, msg):
-        command = msg.data
-        if self.current_state == "WELCOME":
-            # Handle difficulty selection
-            if command == "E":
-                self.current_difficulty_level = "easy"
-                self.setup_level("easy")
-                self.difficulty_selected = True
-                rospy.loginfo("Difficulty set to: EASY")
-                self.publish_game_state()
-            elif command == "M":
-                self.current_difficulty_level = "medium"
-                self.setup_level("medium")
-                self.difficulty_selected = True
-                rospy.loginfo("Difficulty set to: MEDIUM")
-                self.publish_game_state()
-            elif command == "H":
-                self.current_difficulty_level = "hard"
-                self.setup_level("hard")
-                self.difficulty_selected = True
-                rospy.loginfo("Difficulty set to: HARD")
-                self.publish_game_state()
-            
-            # Handle color selection
-            elif command == "1":
-                rospy.set_param('change_player_color', 1)
-                rospy.loginfo("Color set to: RED")
-                self.publish_game_state()
-            elif command == "2":
-                rospy.set_param('change_player_color', 2)
-                rospy.loginfo("Color set to: PURPLE")
-                self.publish_game_state()
-            elif command == "3":
-                rospy.set_param('change_player_color', 3)
-                rospy.loginfo("Color set to: BLUE")
-                self.publish_game_state()
-            
-            # Handle start game
-            elif command == "ENTER" or command == "START":
-                if self.difficulty_selected:
-                    self.Game()
-                else:
-                    rospy.logwarn("Please select a difficulty (E/M/H) before starting the game!")
-            return
+        cmd = msg.data
         
-        if self.current_state == "GAME_OVER":
-            if command == "RESET" or command == "ENTER": 
-                self.Welcome()
-            return
-        
-        if self.current_state == "VICTORY": 
-            if command == "RESET" or command == "ENTER": 
-                self.Welcome()
-            return
-            
+        # 1. JUGANDO (RUNNING)
         if self.current_state == "RUNNING":
-            self.process_command(command)
-            dist_to_crown = abs(self.player_x - 380) + abs(self.player_y - 50)
-            if dist_to_crown < 50:
-                self.score += 1000 * self.lives 
-                self.Victory()
+            self.process_command(cmd)
+            self.publish_game_state()
+            
+        # 2. PANTALLA DE TÍTULO (WELCOME)
+        elif self.current_state == "WELCOME": 
+            # Cambios de color
+            if cmd == "1": rospy.set_param("change_player_color", 1)
+            elif cmd == "2": rospy.set_param("change_player_color", 2)
+            elif cmd == "3": rospy.set_param("change_player_color", 3)
+            
+            # --- ESTO ES LO QUE TE FALTABA ---
+            elif cmd == "ENTER":
+                # Comprobamos si ya tenemos un nombre guardado de antes
+                if self.player_name != "":
+                    rospy.loginfo("Quick Restart initiated with Enter!")
+                    self.Game() # <--- ¡EMPEZAR PARTIDA!
+                else:
+                    rospy.logwarn("No player data found. Run info_user node first.")
+            # ---------------------------------
+            
+            self.publish_game_state()
 
+        # 3. PANTALLA FINAL (GAME OVER / VICTORY)
+        elif self.current_state in ["GAME_OVER", "VICTORY"]:
+            # Volver al menú principal
+            if cmd == "ENTER":
+                rospy.loginfo("Returning to Main Menu...")
+                self.Welcome()
+
+        # 4. SALIDA GLOBAL
+        if cmd == "q": 
+            rospy.signal_shutdown("Quit requested by user")
+        
+        
+        
     def process_command(self, command):
         if command == "LEFT": self.player_x -= self.speed
         elif command == "RIGHT": self.player_x += self.speed
@@ -328,6 +352,7 @@ class GameNode:
 
     def update_physics(self, event):
         if self.current_state != "RUNNING": return
+        self.check_victory() # ¡IMPORTANTE: Verificar victoria antes de mover!
         self.update_player_physics()
         self.update_barrels()
         self.update_coins()
@@ -514,7 +539,37 @@ class GameNode:
         msg.data = self.score
         self.result_publisher.publish(msg)
         self.publish_game_state()
+    
+    def check_victory(self):
+        # 1. Definir coordenadas
+        if self.current_difficulty_level == "easy":
+            # --- CAMBIO: Arriba y centrado ---
+            target_x = 390  # Centro horizontal (aprox)
+            target_y = 45   # Arriba del todo
+            # ------------------------------------------------------------
+        elif self.current_difficulty_level == "medium":
+            target_x = 390
+            target_y = 45
+        else: # hard
+            target_x = 390
+            target_y = 45
 
+        # 2. Calcular distancias
+        dx = abs(self.player_x - target_x)
+        dy = abs(self.player_y - target_y)
+
+        # 3. CONDICIÓN DE VICTORIA (Mantenemos margen amplio)
+        if dx < 45 and dy < 45:
+            rospy.loginfo("!!! VICTORIA DETECTADA !!!")
+            self.Victory()
+        
+        # 4. CHIVATO (Sigue siendo útil)
+        else:
+            if dx < 150: 
+                rospy.loginfo_throttle(0.5, 
+                    f"DEBUG CORONA -> Jugador: ({int(self.player_x)}, {int(self.player_y)}) | Corona: ({target_x}, {target_y}) | Dist: {int(dx)}, {int(dy)}"
+                )
+        
     def Final(self):
         self.current_state = "GAME_OVER"
         # --- UPDATE PARAM: screen_param ---
